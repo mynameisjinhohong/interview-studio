@@ -17,7 +17,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "package:mac": "pnpm build && electron-builder --mac dmg zip",
-    "package:win": "pnpm build && electron-builder --win nsis --x64",
+    "package:win": "pnpm build && electron-builder --win nsis --x64 --publish never",
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
