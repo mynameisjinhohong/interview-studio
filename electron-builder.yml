@@ -1,0 +1,37 @@
+appId: com.interviewstudio.desktop
+productName: Interview Studio
+asar: true
+directories:
+  output: release/${version}
+files:
+  - out/**/*
+  - package.json
+asarUnpack:
+  - node_modules/better-sqlite3/**/*
+  - node_modules/ffmpeg-static/**/*
+  - node_modules/@napi-rs/canvas/**/*
+  - node_modules/@napi-rs/canvas-*/**/*
+extraResources:
+  - from: build/sidecar
+    to: sidecar
+    filter:
+      - "**/*"
+mac:
+  icon: build/icon.png
+  category: public.app-category.education
+  minimumSystemVersion: 22.0.0
+  target:
+    - dmg
+    - zip
+  extendInfo:
+    NSMicrophoneUsageDescription: Interview Studio가 음성 답변을 녹음하고 로컬에서 전사하려면 마이크가 필요합니다.
+    NSCameraUsageDescription: Interview Studio가 면접 복기 영상을 녹화하려면 카메라가 필요합니다.
+win:
+  icon: build/icon.png
+  target:
+    - nsis
+  artifactName: ${productName}-${version}-${arch}.${ext}
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true

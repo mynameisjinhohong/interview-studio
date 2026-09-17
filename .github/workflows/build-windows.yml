@@ -1,0 +1,92 @@
+name: Build Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: Publish the installer to GitHub Releases
+        type: boolean
+        required: true
+        default: true
+      release_tag:
+        description: Release tag
+        type: string
+        required: true
+        default: v0.1.0
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+          run_install: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build whisper.cpp sidecar
+        shell: pwsh
+        run: |
+          $source = Join-Path $env:RUNNER_TEMP "whisper.cpp"
+          $build = Join-Path $source "build"
+          git clone --depth 1 --branch v1.9.4 https://github.com/ggml-org/whisper.cpp.git $source
+          cmake -S $source -B $build -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_SERVER=OFF
+          cmake --build $build --config Release --target whisper-cli --parallel
+          New-Item -ItemType Directory -Force -Path "build/sidecar" | Out-Null
+          Get-ChildItem -Path (Join-Path $build "bin/Release/*") -Include "*.exe", "*.dll" -File |
+            Copy-Item -Destination "build/sidecar" -Force
+          if (-not (Test-Path "build/sidecar/whisper-cli.exe")) {
+            throw "whisper-cli.exe was not produced"
+          }
+
+      - name: Package unsigned Windows installer
+        run: pnpm package:win
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: interview-studio-windows-x64
+          path: release/**/*.exe
+          if-no-files-found: error
+
+      - name: Publish prerelease
+        if: ${{ inputs.publish_release }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ inputs.release_tag }}"
+          $installer = Get-ChildItem -Path "release" -Recurse -Filter "*.exe" | Select-Object -First 1
+          if (-not $installer) { throw "Windows installer was not found" }
+
+          gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag $installer.FullName --clobber --repo $env:GITHUB_REPOSITORY
+          } else {
+            gh release create $tag $installer.FullName `
+              --repo $env:GITHUB_REPOSITORY `
+              --target $env:GITHUB_SHA `
+              --title "Interview Studio 0.1.0 alpha" `
+              --notes-file "docs/RELEASE_NOTES_0.1.0.md" `
+              --prerelease
+          }
