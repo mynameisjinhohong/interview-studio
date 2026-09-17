@@ -18,10 +18,11 @@
 
 ### 2.1 앱 설치
 
-1. [Interview Studio Releases](https://github.com/mynameisjinhohong/interview-studio/releases)에서 최신 prerelease를 엽니다.
-2. `Interview Studio-0.1.0-x64.exe`를 내려받습니다.
-3. SmartScreen이 표시되면 게시자가 `알 수 없음`인 개인용 alpha임을 확인하고, 신뢰할 수 있는 저장소에서 직접 받은 파일일 때만 `추가 정보` → `실행`을 선택합니다.
-4. 설치 위치를 선택해 설치한 뒤 Interview Studio를 실행합니다.
+1. 저장소가 private이므로 Windows PC의 브라우저에서 GitHub 계정 `mynameisjinhohong`로 로그인합니다.
+2. [Interview Studio Releases](https://github.com/mynameisjinhohong/interview-studio/releases)에서 최신 prerelease를 엽니다.
+3. `Interview.Studio-0.1.0-x64.exe`를 내려받습니다.
+4. SmartScreen이 표시되면 게시자가 `알 수 없음`인 개인용 alpha임을 확인하고, 신뢰할 수 있는 저장소에서 직접 받은 파일일 때만 `추가 정보` → `실행`을 선택합니다.
+5. 설치 위치를 선택해 설치한 뒤 Interview Studio를 실행합니다.
 
 Windows 설치 파일에는 FFmpeg와 `whisper-cli.exe`가 포함됩니다. 음성 모델은 크기가 크므로 앱에서 별도로 내려받습니다.
 
@@ -171,7 +172,7 @@ pnpm package:win
 
 ## 6. macOS 설치와 설정
 
-1. [Releases](https://github.com/mynameisjinhohong/interview-studio/releases)에서 Apple Silicon용 `.dmg`를 내려받습니다.
+1. [Releases](https://github.com/mynameisjinhohong/interview-studio/releases)에서 Apple Silicon용 `Interview.Studio-0.1.0-arm64.dmg`를 내려받습니다.
 2. 앱을 Applications 폴더로 옮깁니다.
 3. 서명되지 않은 alpha 경고가 뜨면 `시스템 설정` → `개인정보 보호 및 보안`에서 차단된 Interview Studio의 `확인 없이 열기`를 선택합니다.
 4. 터미널에서 사용할 CLI를 설치하고 로그인한 뒤 앱을 다시 시작합니다.
