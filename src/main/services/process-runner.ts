@@ -35,17 +35,21 @@ export const runProcess = (
   const stdout: Buffer[] = []
   const stderr: Buffer[] = []
   let settled = false
+  let timeoutError: Error | undefined
   let idleTimeout: ReturnType<typeof setTimeout> | undefined
   const clearTimers = (): void => {
     clearTimeout(overallTimeout)
     if (idleTimeout) clearTimeout(idleTimeout)
   }
   const rejectForTimeout = (message: string): void => {
-    if (settled) return
-    child.kill(process.platform === 'win32' ? undefined : 'SIGKILL')
-    settled = true
+    if (settled || timeoutError) return
+    timeoutError = new Error(message)
     clearTimers()
-    reject(new Error(message))
+    const killed = child.kill(process.platform === 'win32' ? undefined : 'SIGKILL')
+    if (!killed) {
+      settled = true
+      reject(timeoutError)
+    }
   }
   const overallMs = options.timeoutMs ?? 60_000
   const overallTimeout = setTimeout(() => rejectForTimeout(`프로세스가 ${overallMs}ms 전체 제한 안에 끝나지 않았습니다.`), overallMs)
@@ -64,12 +68,16 @@ export const runProcess = (
     if (settled) return
     settled = true
     clearTimers()
-    reject(error)
+    reject(timeoutError ?? error)
   })
   child.on('close', (code) => {
     if (settled) return
     settled = true
     clearTimers()
+    if (timeoutError) {
+      reject(timeoutError)
+      return
+    }
     resolve({ stdout: Buffer.concat(stdout).toString('utf8'), stderr: Buffer.concat(stderr).toString('utf8'), exitCode: code ?? -1, durationMs: Date.now() - started })
   })
   if (options.input) child.stdin.end(options.input)
