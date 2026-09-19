@@ -146,6 +146,20 @@ function NewSession({ data, refresh }: { data: DashboardData; refresh: () => Pro
   const navigate = useNavigate(), [searchParams] = useSearchParams(), [type, setType] = useState<'technical' | 'company'>('technical')
   const [jobPostText, setJobPostText] = useState(''), [jobPostName, setJobPostName] = useState('')
   const [busy, setBusy] = useState(false), [error, setError] = useState('')
+  const [elapsed, setElapsed] = useState(0), [cancelling, setCancelling] = useState(false)
+  const preparationRequest = useRef<string | null>(null)
+  useEffect(() => {
+    if (!busy) { setElapsed(0); return }
+    const startedAt = Date.now()
+    const update = () => setElapsed(Math.floor((Date.now() - startedAt) / 1_000))
+    update()
+    const timer = window.setInterval(update, 1_000)
+    return () => window.clearInterval(timer)
+  }, [busy])
+  useEffect(() => () => {
+    const requestId = preparationRequest.current
+    if (requestId) void api.cancelSessionPreparation(requestId)
+  }, [])
   if (!data.profiles.length) return <div className="page"><EmptyState title="프로필이 먼저 필요합니다" body="면접관에게 전달할 경력 컨텍스트를 만들어 주세요." action="프로필 만들기" to="/profiles" /></div>
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault(); setBusy(true); setError(''); const form = new FormData(event.currentTarget)
@@ -161,16 +175,35 @@ function NewSession({ data, refresh }: { data: DashboardData; refresh: () => Pro
     try {
       const retention = await api.retentionCandidate()
       if (retention && !confirm(`최근 세션은 10개만 보관합니다. 새 면접을 시작하면 가장 오래된 “${retention.deletedTitle}”의 영상·전사·평가·조사 자료가 삭제됩니다. 계속할까요?`)) { setBusy(false); return }
-      const session = await api.prepareSession(config); await refresh()
+      const requestId = crypto.randomUUID()
+      preparationRequest.current = requestId
+      const session = await api.prepareSession(config, requestId)
+      preparationRequest.current = null
+      await refresh()
       if (session.status === 'partial') throw new Error(session.errorReason ?? '세션 준비에 실패했습니다.')
       navigate(`/interview/${session.id}`)
-    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); setBusy(false) }
+    } catch (reason) {
+      preparationRequest.current = null
+      setError(reason instanceof Error ? reason.message : String(reason)); setBusy(false); setCancelling(false)
+    }
+  }
+  const cancelPreparation = async () => {
+    const requestId = preparationRequest.current
+    if (!requestId || cancelling) return
+    setCancelling(true)
+    try {
+      const cancelled = await api.cancelSessionPreparation(requestId)
+      if (!cancelled) { preparationRequest.current = null; setBusy(false); setCancelling(false) }
+    } catch (reason) {
+      setError(`취소 요청 실패: ${reason instanceof Error ? reason.message : String(reason)}`)
+      setCancelling(false)
+    }
   }
   return <div className="page"><header className="compact-header"><div><div className="eyebrow">CREATE SESSION</div><h1>새 면접 만들기</h1><p>면접관이 자료를 조사하고 질문 목록을 준비합니다.</p></div></header>
     <form className="session-form" onSubmit={submit}><section><h2>1. 면접 종류</h2><div className="choice-grid"><button type="button" className={type === 'technical' ? 'selected' : ''} onClick={() => setType('technical')}><Bot /><strong>기술 면접</strong><span>기술 스택과 집중 영역 중심</span></button><button type="button" className={type === 'company' ? 'selected' : ''} onClick={() => setType('company')}><Building2 /><strong>회사 면접</strong><span>회사·공고·전형 맞춤 조사</span></button></div></section>
       <section><h2>2. 기본 설정</h2><div className="form-grid"><label>지원 프로필<select name="profileId">{data.profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name} · {profile.targetRole}</option>)}</select></label><label>진행 모드<select name="mode"><option value="practice">연습 · 즉시 피드백</option><option value="real">실전 · 종료 후 피드백</option></select></label><label>AI CLI<select name="provider" defaultValue={data.settings.defaultProvider}>{Object.entries(providerLabel).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><label>본 질문 개수<input name="questionCount" type="number" min="3" max="10" defaultValue="5" /></label><label>경력 수준<select name="level"><option>신입</option><option>1~3년</option><option>4~7년</option><option>8년 이상</option></select></label><label>모델 override <small>선택</small><input name="modelOverride" placeholder="CLI 기본 모델 사용" /></label></div></section>
       <section><h2>3. 면접 범위</h2>{type === 'technical' ? <div className="form-grid"><label className="full">기술 스택 <small>쉼표로 구분</small><input required name="stacks" placeholder="Unity, C#, URP" /></label><label>집중 영역<input name="focus" defaultValue={searchParams.get('focus') ?? ''} placeholder="메모리 최적화, 아키텍처" /></label><label>제외 영역<input name="exclude" placeholder="네트워크" /></label></div> : <div className="form-grid"><label>회사<input required name="company" placeholder="넥슨" /></label><label>직무<input required name="role" placeholder="게임 클라이언트 개발" /></label><label>전형 단계<select name="stage"><option>1차 직무 면접</option><option>2차 면접</option><option>임원 면접</option><option>알 수 없음</option></select></label><label>채용 공고 URL<input name="jobPostUrl" type="url" placeholder="https://..." /></label><label className="full">채용 공고 파일<button type="button" className="drop-zone compact" onClick={async () => { const selected = await api.selectJobPostFile(); if (selected) { setJobPostText(selected.text); setJobPostName(selected.name) } }}><Download />{jobPostName || 'PDF, DOCX, TXT 또는 이미지 선택'}</button></label><label className="full">채용 공고 본문<textarea name="jobPostText" rows={5} value={jobPostText} onChange={(event) => setJobPostText(event.target.value)} placeholder="공고 내용을 붙여 넣으면 정확도가 높아집니다." /></label></div>}<label className="check inline-check"><input type="checkbox" name="forceResearch" /><span><Check /></span> 캐시를 무시하고 공개 자료를 새로 조사</label></section>
-      {error && <p className="error"><AlertTriangle />{error}</p>}<button className="primary prepare" disabled={busy}>{busy ? <><LoaderCircle className="spin" /> 웹 자료 조사와 질문 생성 중…</> : <><Sparkles /> 면접 준비하기</>}</button>
+      {error && <p className="error"><AlertTriangle />{error}</p>}{busy ? <div className="preparation-status"><LoaderCircle className="spin" /><span><strong>웹 자료 조사와 질문 생성 중…</strong><small>{formatTime(elapsed)} 경과 · 완료될 때까지 계속 기다립니다.</small></span><button type="button" className="danger-button" disabled={cancelling} onClick={cancelPreparation}><Square />{cancelling ? '취소 중…' : '준비 취소'}</button></div> : <button className="primary prepare"><Sparkles /> 면접 준비하기</button>}
     </form>
   </div>
 }

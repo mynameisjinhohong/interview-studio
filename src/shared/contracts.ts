@@ -256,7 +256,8 @@ export interface InterviewStudioApi {
   saveSettings(settings: Partial<AppSettings>): Promise<AppSettings>
   probeClis(): Promise<CliProbeResult[]>
   testCli(provider: Provider): Promise<{ ok: true }>
-  prepareSession(config: SessionConfig): Promise<InterviewSession>
+  prepareSession(config: SessionConfig, requestId: string): Promise<InterviewSession>
+  cancelSessionPreparation(requestId: string): Promise<boolean>
   retentionCandidate(): Promise<{ deletedTitle: string } | null>
   getSession(id: string): Promise<InterviewSession | null>
   startSession(id: string): Promise<InterviewSession>

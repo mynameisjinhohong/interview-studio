@@ -94,4 +94,17 @@ describe('CLI invocation contract', () => {
     })
     expect(result).toEqual({ ok: true })
   })
+
+  it('terminates a running CLI call when the user cancels it', async () => {
+    const { root } = setup()
+    const controller = new AbortController()
+    const startedAt = Date.now()
+    const pending = runProcess(process.execPath, ['-e', `setTimeout(()=>console.log('done'),500)`], {
+      cwd: root, timeoutMs: null, signal: controller.signal
+    })
+    setTimeout(() => controller.abort(), 25)
+
+    await expect(pending).rejects.toThrow('사용자가 작업을 취소했습니다.')
+    expect(Date.now() - startedAt).toBeLessThan(300)
+  })
 })

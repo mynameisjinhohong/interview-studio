@@ -34,16 +34,24 @@ export const latestTurnsByDepth = (turns: InterviewTurn[]): InterviewTurn[] => {
 }
 
 export class InterviewService {
+  private readonly activePreparations = new Map<string, AbortController>()
+
   constructor(private db: AppDatabase, private cli: CliRegistry, private research: ResearchService, private stt: SttService) {}
 
-  async prepare(rawConfig: SessionConfig): Promise<InterviewSession> {
+  async prepare(rawConfig: SessionConfig, requestId: string = crypto.randomUUID()): Promise<InterviewSession> {
+    if (this.activePreparations.has(requestId)) throw new Error('이미 진행 중인 면접 준비 요청입니다.')
+    const controller = new AbortController()
+    this.activePreparations.set(requestId, controller)
     const config = sessionConfigSchema.parse(rawConfig)
     const profile = this.db.getProfile(config.profileId)
-    if (!profile) throw new Error('선택한 프로필을 찾을 수 없습니다.')
+    if (!profile) {
+      this.activePreparations.delete(requestId)
+      throw new Error('선택한 프로필을 찾을 수 없습니다.')
+    }
     this.db.enforceRetention()
     let session = this.db.createSession(config)
     try {
-      const research = await this.research.research(config, profile, config.forceResearch)
+      const research = await this.research.research(config, profile, config.forceResearch, controller.signal)
       let effectiveType = config.type
       let effectiveStacks = config.stacks
       if (config.type === 'company' && !research.sufficientForCompany) {
@@ -60,7 +68,7 @@ export class InterviewService {
           sources: research.sources.map(({ title, url, summary }) => ({ title, url, summary }))
         },
         questionPlanJsonSchema, questionPlanSchema,
-        { model: config.modelOverride }
+        { model: config.modelOverride, timeoutMs: null, idleTimeoutMs: null, signal: controller.signal }
       )
       const normalizedPlan = normalizePlan(plan, config.questionCount)
       const sessionFolder = join(this.db.root, 'sessions', session.id)
@@ -72,8 +80,18 @@ export class InterviewService {
       })
       return session
     } catch (error) {
-      return this.db.updateSession(session.id, { status: nextInterviewStatus(session.status, 'FAIL'), errorReason: error instanceof Error ? error.message : String(error), completedAt: new Date().toISOString() })
+      const reason = controller.signal.aborted ? '사용자가 면접 준비를 취소했습니다.' : error instanceof Error ? error.message : String(error)
+      return this.db.updateSession(session.id, { status: nextInterviewStatus(session.status, 'FAIL'), errorReason: reason, completedAt: new Date().toISOString() })
+    } finally {
+      if (this.activePreparations.get(requestId) === controller) this.activePreparations.delete(requestId)
     }
+  }
+
+  cancelPreparation(requestId: string): boolean {
+    const controller = this.activePreparations.get(requestId)
+    if (!controller) return false
+    controller.abort()
+    return true
   }
 
   start(id: string): InterviewSession {

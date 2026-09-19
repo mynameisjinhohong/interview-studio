@@ -5,9 +5,16 @@ import { homedir } from 'node:os'
 import { z, type ZodType } from 'zod'
 import type { CliProbeResult, Provider } from '../../shared/contracts.js'
 import { DiagnosticLogger } from './logger.js'
-import { runProcess } from './process-runner.js'
+import { ProcessCancelledError, runProcess } from './process-runner.js'
 
-export interface InvokeOptions { allowWeb?: boolean; model?: string; timeoutMs?: number; idleTimeoutMs?: number; retries?: number }
+export interface InvokeOptions {
+  allowWeb?: boolean
+  model?: string
+  timeoutMs?: number | null
+  idleTimeoutMs?: number | null
+  retries?: number
+  signal?: AbortSignal
+}
 
 export interface CliAdapter {
   provider: Provider
@@ -95,6 +102,7 @@ export abstract class BaseAdapter implements CliAdapter {
   }
 
   async invokeStructured<T>(task: string, input: unknown, jsonSchema: object, validator: ZodType<T>, options: InvokeOptions = {}): Promise<T> {
+    if (options.signal?.aborted) throw new ProcessCancelledError()
     const executable = findExecutable(this.command)
     if (!executable) throw new Error(`${this.command} CLI가 설치되어 있지 않습니다.`)
     const schemaPath = join(this.runtimeDir, `${this.provider}-${crypto.randomUUID()}.schema.json`)
@@ -110,13 +118,14 @@ export abstract class BaseAdapter implements CliAdapter {
     for (let attempt = 0; attempt <= retries; attempt += 1) {
       try {
         const result = await runProcess(executable, this.args(schemaPath, options), {
-          cwd: this.runtimeDir, input: payload, timeoutMs: options.timeoutMs ?? 60_000,
-          idleTimeoutMs: options.idleTimeoutMs, pathEntries: cliRuntimePathEntries(executable)
+          cwd: this.runtimeDir, input: payload, timeoutMs: options.timeoutMs,
+          idleTimeoutMs: options.idleTimeoutMs, signal: options.signal, pathEntries: cliRuntimePathEntries(executable)
         })
         this.logger.write('cli.invoke', { provider: this.provider, attempt, exitCode: result.exitCode, durationMs: result.durationMs, allowWeb: !!options.allowWeb })
         if (result.exitCode !== 0) throw new Error(`${this.provider} CLI 종료 코드 ${result.exitCode}: ${result.stderr.slice(0, 240)}`)
         return validator.parse(parseStructuredJson(result.stdout))
       } catch (error) {
+        if (error instanceof ProcessCancelledError || options.signal?.aborted) throw error
         lastError = error
         this.logger.write('cli.failure', { provider: this.provider, attempt, error: error instanceof Error ? error.name : 'unknown' })
       }
