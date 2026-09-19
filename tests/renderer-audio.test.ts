@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
+import { mediaProtocolPrivileges } from '../src/main/media-protocol-config.js'
 import { AudioSampleController, ExclusiveAudioPlayer, type AudioElementLike } from '../src/shared/audio-playback.js'
 
 const deferred = <T>() => {
@@ -12,6 +13,10 @@ const deferred = <T>() => {
 const fakeAudio = (): AudioElementLike => ({ currentTime: 12, pause: vi.fn(), play: vi.fn().mockResolvedValue(undefined) })
 
 describe('renderer audio playback', () => {
+  it('enables CORS for renderer fetches from the local media protocol', () => {
+    expect(mediaProtocolPrivileges).toMatchObject({ supportFetchAPI: true, corsEnabled: true })
+  })
+
   it('allows fetch access to the local media protocol in the CSP', () => {
     const html = readFileSync(join(process.cwd(), 'src', 'renderer', 'index.html'), 'utf8')
     const policy = html.match(/Content-Security-Policy" content="([^"]+)/)?.[1] ?? ''

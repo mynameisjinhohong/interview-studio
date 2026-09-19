@@ -17,8 +17,9 @@ import { InterviewService } from './services/interview-service.js'
 import { exportSessionPdf } from './export-service.js'
 import { providerSchema, sessionConfigSchema, settingsSchema, type CompleteTurnInput, type RecordingChunkInput } from '../shared/contracts.js'
 import { IPC } from '../shared/ipc.js'
+import { mediaProtocolPrivileges } from './media-protocol-config.js'
 
-protocol.registerSchemesAsPrivileged([{ scheme: 'interview-media', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }])
+protocol.registerSchemesAsPrivileged([{ scheme: 'interview-media', privileges: mediaProtocolPrivileges }])
 
 let mainWindow: BrowserWindow | null = null
 const approvedProfileFiles = new Set<string>()
