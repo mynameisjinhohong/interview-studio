@@ -10,6 +10,7 @@ import type {
   InterviewSession, InterviewTurn, Profile, Provider, SessionConfig
 } from '../../shared/contracts'
 import { ANSWER_LIMIT_SECONDS, answerWarning } from '../../shared/interview-rules'
+import { AudioSampleController, ExclusiveAudioPlayer } from '../../shared/audio-playback'
 import interviewStudioLogo from './assets/interview-studio-logo.png'
 
 const api = window.interviewStudio
@@ -389,11 +390,22 @@ function TranscriptEdit({ turn, close, save }: { turn: InterviewTurn; close: () 
 
 function SettingsPage({ data, refresh }: { data: DashboardData; refresh: () => Promise<void> }): JSX.Element {
   const [probes, setProbes] = useState<CliProbeResult[]>([]), [voices, setVoices] = useState<Array<{ id: string; name: string; language: string }>>([]), [stt, setStt] = useState<{ binary: string | null; models: Record<string, boolean> } | null>(null), [busyModel, setBusyModel] = useState('')
-  useEffect(() => { void Promise.all([api.probeClis().then(setProbes), api.listVoices().then(setVoices), api.getSttStatus().then(setStt)]) }, [])
+  const [sampleError, setSampleError] = useState('')
+  const sampleController = useRef<AudioSampleController | null>(null)
+  if (!sampleController.current) {
+    sampleController.current = new AudioSampleController(
+      () => api.renderSpeech('안녕하세요. 지금부터 모의 면접을 시작하겠습니다.'),
+      new ExclusiveAudioPlayer((url) => new Audio(url))
+    )
+  }
+  useEffect(() => {
+    void Promise.all([api.probeClis().then(setProbes), api.listVoices().then(setVoices), api.getSttStatus().then(setStt)])
+    return () => sampleController.current?.stop()
+  }, [])
   const save = async (patch: Partial<AppSettings>) => { await api.saveSettings(patch); await refresh() }
   return <div className="page"><header className="compact-header"><div><div className="eyebrow">SYSTEM</div><h1>설정과 진단</h1><p>AI CLI, 음성, 로컬 모델과 데이터 상태를 관리합니다.</p></div></header>
     <div className="settings-grid"><section><h2>AI CLI</h2><p>인증과 모델 외 사용자 규칙·플러그인은 적용하지 않습니다.</p><div className="probe-list">{(['codex', 'claude', 'gemini'] as Provider[]).map((provider) => { const item = probes.find((probe) => probe.provider === provider); const usable = !!item?.installed && !item.error && item.authenticated !== false; const detail = !item ? '확인 중…' : !item.installed ? '설치되지 않음' : item.error ? item.error : item.authenticated === false ? '인증 필요' : `${item.version} · 사용 가능`; return <label key={provider} className={data.settings.defaultProvider === provider ? 'active' : ''}><input type="radio" name="provider" checked={data.settings.defaultProvider === provider} onChange={() => void save({ defaultProvider: provider })} /><Bot /><span><strong>{providerLabel[provider]}</strong><small>{detail}</small></span><i className={usable ? 'ok' : ''}>{usable ? <Check /> : <X />}</i></label> })}</div><button className="secondary" onClick={async () => setProbes(await api.probeClis())}><RefreshCw /> 다시 확인</button></section>
-      <section><h2>면접관 음성</h2><label>한국어 음성<select value={data.settings.ttsVoice} onChange={(event) => void save({ ttsVoice: event.target.value })}><option value="">운영체제 기본값</option>{voices.map((voice) => <option key={voice.id} value={voice.id}>{voice.name} · {voice.language}</option>)}</select></label><label>말하기 속도<input type="range" min="0.7" max="1.4" step="0.1" value={data.settings.ttsRate} onChange={(event) => void save({ ttsRate: Number(event.target.value) })} /><span>{data.settings.ttsRate}×</span></label><button className="secondary" onClick={async () => { const url = await api.renderSpeech('안녕하세요. 지금부터 모의 면접을 시작하겠습니다.'); await new Audio(url).play() }}><Volume2 /> 음성 샘플</button></section>
+      <section><h2>면접관 음성</h2><label>한국어 음성<select value={data.settings.ttsVoice} onChange={(event) => void save({ ttsVoice: event.target.value })}><option value="">운영체제 기본값</option>{voices.map((voice) => <option key={voice.id} value={voice.id}>{voice.name} · {voice.language}</option>)}</select></label><label>말하기 속도<input type="range" min="0.7" max="1.4" step="0.1" value={data.settings.ttsRate} onChange={(event) => void save({ ttsRate: Number(event.target.value) })} /><span>{data.settings.ttsRate}×</span></label><button className="secondary" onClick={async () => { setSampleError(''); try { await sampleController.current?.replay() } catch (reason) { setSampleError(reason instanceof Error ? reason.message : String(reason)) } }}><Volume2 /> 음성 샘플</button>{sampleError && <p className="error"><AlertTriangle />음성 샘플 재생 실패: {sampleError}</p>}</section>
       <section><h2>로컬 음성 인식</h2><p>실행 파일: {stt?.binary ?? 'whisper-cli를 찾지 못했습니다'}</p><div className="model-list">{(['base', 'small', 'medium'] as const).map((model) => <div key={model}><span><strong>{model}</strong><small>{model === 'base' ? '빠름' : model === 'small' ? '권장 균형' : '고정확도'}</small></span>{stt?.models[model] ? <b><Check /> 설치됨</b> : <button disabled={!!busyModel} onClick={async () => { setBusyModel(model); await api.downloadSttModel(model); setStt(await api.getSttStatus()); setBusyModel('') }}>{busyModel === model ? <LoaderCircle className="spin" /> : <Download />} 다운로드</button>}</div>)}</div><label>기본 모델<select value={data.settings.sttModel} onChange={(event) => void save({ sttModel: event.target.value as AppSettings['sttModel'] })}><option>base</option><option>small</option><option>medium</option></select></label></section>
       <section className="danger-zone"><h2>로컬 데이터</h2><p>프로필, 원본 복사본, 세션, 영상, 모델과 집계 통계를 모두 삭제합니다. 복구할 수 없습니다.</p><button className="danger-button" onClick={async () => { if (confirm('Interview Studio의 모든 로컬 데이터를 영구 삭제할까요?')) { await api.deleteAllData(); await refresh() } }}><Trash2 /> 모든 데이터 삭제</button></section></div>
   </div>
