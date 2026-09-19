@@ -51,23 +51,35 @@ export const runProcess = (
   const stdout: Buffer[] = []
   const stderr: Buffer[] = []
   let settled = false
+  let terminationError: Error | undefined
   let overallTimeout: ReturnType<typeof setTimeout> | undefined
   let idleTimeout: ReturnType<typeof setTimeout> | undefined
+  let terminationFallback: ReturnType<typeof setTimeout> | undefined
   const clearTimers = (): void => {
     if (overallTimeout) clearTimeout(overallTimeout)
     if (idleTimeout) clearTimeout(idleTimeout)
+    if (terminationFallback) clearTimeout(terminationFallback)
     options.signal?.removeEventListener('abort', abortProcess)
   }
-  const terminate = (error: Error): void => {
+  const finishRejection = (error: Error): void => {
     if (settled) return
     settled = true
     clearTimers()
+    reject(error)
+  }
+  const terminate = (error: Error): void => {
+    if (settled || terminationError) return
+    terminationError = error
+    clearTimers()
     if (process.platform === 'win32' && child.pid) {
       const killer = spawn('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' })
-      killer.once('error', () => child.kill())
+      killer.once('error', () => {
+        if (!child.kill()) finishRejection(error)
+      })
+      killer.once('close', (code) => { if (code !== 0) child.kill() })
       killer.unref()
-    } else child.kill('SIGKILL')
-    reject(error)
+    } else if (!child.kill('SIGKILL')) { finishRejection(error); return }
+    terminationFallback = setTimeout(() => finishRejection(error), 3_000)
   }
   function abortProcess(): void { terminate(new ProcessCancelledError()) }
   if (options.timeoutMs !== null) {
@@ -88,15 +100,13 @@ export const runProcess = (
   child.stdout.on('data', (chunk) => { stdout.push(Buffer.from(chunk)); refreshIdleTimeout() })
   child.stderr.on('data', (chunk) => { stderr.push(Buffer.from(chunk)); refreshIdleTimeout() })
   child.on('error', (error) => {
-    if (settled) return
-    settled = true
-    clearTimers()
-    reject(error)
+    finishRejection(terminationError ?? error)
   })
   child.on('close', (code) => {
     if (settled) return
     settled = true
     clearTimers()
+    if (terminationError) { reject(terminationError); return }
     resolve({ stdout: Buffer.concat(stdout).toString('utf8'), stderr: Buffer.concat(stderr).toString('utf8'), exitCode: code ?? -1, durationMs: Date.now() - started })
   })
   if (options.input) child.stdin.end(options.input)

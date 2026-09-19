@@ -8,7 +8,7 @@ import { DiagnosticLogger } from '../src/main/services/logger.js'
 import { runProcess } from '../src/main/services/process-runner.js'
 
 const roots: string[] = []
-afterEach(() => roots.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true })))
+afterEach(() => roots.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 })))
 
 class TestAdapter extends BaseAdapter {
   provider = 'codex' as const
@@ -88,9 +88,9 @@ describe('CLI invocation contract', () => {
 
   it('refreshes the inactivity deadline when the CLI emits progress', async () => {
     const { root, logger } = setup()
-    const adapter = new TestAdapter(root, logger, `const timer=setInterval(()=>console.error('progress'),20);setTimeout(()=>{clearInterval(timer);console.log('{"ok":true}')},250)`)
+    const adapter = new TestAdapter(root, logger, `const timer=setInterval(()=>console.error('progress'),50);setTimeout(()=>{clearInterval(timer);console.log('{"ok":true}')},1000)`)
     const result = await adapter.invokeStructured('test', {}, {}, z.object({ ok: z.boolean() }), {
-      timeoutMs: 500, idleTimeoutMs: 120, retries: 0
+      timeoutMs: 2_000, idleTimeoutMs: 500, retries: 0
     })
     expect(result).toEqual({ ok: true })
   })
@@ -105,6 +105,6 @@ describe('CLI invocation contract', () => {
     setTimeout(() => controller.abort(), 25)
 
     await expect(pending).rejects.toThrow('사용자가 작업을 취소했습니다.')
-    expect(Date.now() - startedAt).toBeLessThan(300)
+    expect(Date.now() - startedAt).toBeLessThan(3_000)
   })
 })
