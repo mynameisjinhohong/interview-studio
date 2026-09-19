@@ -199,10 +199,23 @@ export class CliRegistry {
   }
   get(provider: Provider): CliAdapter { return this.adapters[provider] }
   probeAll(): Promise<CliProbeResult[]> { return Promise.all(Object.values(this.adapters).map((adapter) => adapter.probe())) }
+  async test(provider: Provider): Promise<{ ok: true }> {
+    return this.get(provider).invokeStructured(
+      '연결 확인입니다. ok를 true로 반환하세요.', {},
+      { type: 'object', additionalProperties: false, properties: { ok: { type: 'boolean', const: true } }, required: ['ok'] },
+      z.object({ ok: z.literal(true) }), { allowWeb: false, timeoutMs: 120_000, idleTimeoutMs: 90_000, retries: 0 }
+    )
+  }
 }
 
-export const structuredProfileResult = z.object({ markdown: z.string(), completeness: z.number().min(0).max(100), missingSections: z.array(z.string()) })
+export const structuredProfileResult = z.object({
+  markdown: z.string(), completeness: z.number().min(0).max(100), missingSections: z.array(z.string()),
+  followUpQuestions: z.array(z.string()).default([])
+})
 export const structuredSourceDigestResult = z.object({ markdown: z.string() })
+export const structuredPublicUrlResult = z.object({
+  title: z.string(), text: z.string().max(100_000), sourceUrls: z.array(z.string().url()).max(20)
+})
 export const structuredResearchResult = z.object({
   summary: z.string(), inferredStacks: z.array(z.string()),
   sources: z.array(z.object({ title: z.string(), url: z.string(), publishedAt: z.string().nullable(), confidence: z.enum(['high', 'medium', 'low']), summary: z.string() })),

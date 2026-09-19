@@ -1,8 +1,8 @@
 export const IPC = {
   bootstrap: 'app:bootstrap', selectProfileFiles: 'profile:select-files', createProfile: 'profile:create',
   selectJobPostFile: 'session:select-job-post',
-  regenerateProfile: 'profile:regenerate', updateProfileContext: 'profile:update-context', deleteProfile: 'profile:delete', saveSettings: 'settings:save',
-  probeClis: 'cli:probe', prepareSession: 'session:prepare', getSession: 'session:get',
+  regenerateProfile: 'profile:regenerate', supplementProfile: 'profile:supplement', updateProfileContext: 'profile:update-context', deleteProfile: 'profile:delete', saveSettings: 'settings:save',
+  probeClis: 'cli:probe', testCli: 'cli:test', prepareSession: 'session:prepare', getSession: 'session:get',
   retentionCandidate: 'session:retention-candidate',
   startSession: 'session:start', completeTurn: 'session:complete-turn', finishSession: 'session:finish',
   updateTranscript: 'session:update-transcript', appendRecordingChunk: 'recording:append',

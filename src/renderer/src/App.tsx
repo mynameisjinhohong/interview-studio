@@ -37,21 +37,35 @@ function Shell({ children }: { children: React.ReactNode }): JSX.Element {
   </div>
 }
 
-function Onboarding({ onComplete }: { onComplete: () => Promise<void> }): JSX.Element {
-  const [accepted, setAccepted] = useState(false)
-  const [busy, setBusy] = useState(false)
+function Onboarding({ settings, onComplete }: { settings: AppSettings; onComplete: () => Promise<void> }): JSX.Element {
+  const [accepted, setAccepted] = useState(settings.consentAccepted)
+  const [selected, setSelected] = useState<Provider>(settings.defaultProvider)
+  const [probes, setProbes] = useState<CliProbeResult[]>([])
+  const [busy, setBusy] = useState(false), [error, setError] = useState('')
+  const probe = async () => { setError(''); setProbes(await api.probeClis()) }
+  useEffect(() => { void probe() }, [])
+  const selectedProbe = probes.find((item) => item.provider === selected)
+  const usable = !!selectedProbe?.installed && !selectedProbe.error && selectedProbe.authenticated !== false
   const submit = async () => {
-    if (!accepted) return
-    setBusy(true); await api.saveSettings({ consentAccepted: true }); await onComplete(); setBusy(false)
+    if (!accepted || !usable) return
+    setBusy(true); setError('')
+    try {
+      await api.testCli(selected)
+      await api.saveSettings({ consentAccepted: true, cliVerified: true, defaultProvider: selected })
+      await onComplete()
+    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); setBusy(false) }
   }
   return <div className="onboarding">
     <div className="onboarding-copy"><div className="onboarding-logo"><img src={interviewStudioLogo} alt="Interview Studio 로고" /><strong>Interview Studio</strong></div><div className="eyebrow">WELCOME TO</div><h1>면접의 긴장까지<br /><em>연습</em>하세요.</h1><p>내 포트폴리오를 이해하는 AI 면접관과 목소리로 대화하고, 답변과 영상을 한 번에 복기합니다.</p>
       <div className="feature-row"><span><Mic /> 음성 면접</span><span><Bot /> 동적 꼬리질문</span><span><MonitorPlay /> 로컬 녹화</span></div>
     </div>
-    <div className="consent-card"><h2>시작하기 전 확인</h2><p>Interview Studio는 기기에 설치된 AI CLI를 사용합니다.</p>
-      <ul><li>프로필 요약과 답변 전사는 선택한 CLI를 통해 해당 LLM 공급자에게 전달됩니다.</li><li>원본 음성, 카메라 영상과 업로드 파일은 LLM에 전달하지 않습니다.</li><li>모든 앱 데이터는 이 기기에 평문으로 저장됩니다.</li></ul>
+    <div className="consent-card"><h2>AI 면접관 연결</h2><p>컨텍스트 수집 전에 기기에 설치된 AI CLI를 실제 호출해 연결을 확인합니다.</p>
+      <ul><li>프로필 요약과 답변 전사는 선택한 CLI를 통해 해당 LLM 공급자에게 전달됩니다.</li><li>원본 파일 바이트·음성·카메라 영상은 보내지 않으며, 문서에서 추출한 텍스트는 컨텍스트 생성을 위해 전달됩니다.</li><li>모든 앱 데이터는 이 기기에 평문으로 저장됩니다.</li></ul>
       <label className="check"><input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} /><span><Check /></span> 위 내용을 이해하고 동의합니다.</label>
-      <button className="primary wide" disabled={!accepted || busy} onClick={submit}>{busy ? <LoaderCircle className="spin" /> : 'Interview Studio 시작'} <ChevronRight /></button>
+      <div className="probe-list onboarding-probes">{(['codex', 'claude', 'gemini'] as Provider[]).map((provider) => { const item = probes.find((probeResult) => probeResult.provider === provider); const ready = !!item?.installed && !item.error && item.authenticated !== false; const detail = !item ? '확인 중…' : !item.installed ? '설치되지 않음' : item.error ? item.error : item.authenticated === false ? '로그인 필요' : `${item.version} · 연결 후보`; return <label key={provider} className={selected === provider ? 'active' : ''}><input type="radio" checked={selected === provider} onChange={() => setSelected(provider)} /><Bot /><span><strong>{providerLabel[provider]}</strong><small>{detail}</small></span><i className={ready ? 'ok' : ''}>{ready ? <Check /> : <X />}</i></label> })}</div>
+      <button className="secondary wide" disabled={busy} onClick={probe}><RefreshCw /> CLI 다시 확인</button>
+      {error && <p className="error"><AlertTriangle />{error}</p>}
+      <button className="primary wide onboarding-start" disabled={!accepted || !usable || busy} onClick={submit}>{busy ? <><LoaderCircle className="spin" /> 실제 연결 테스트 중…</> : <>연결 테스트 및 시작 <ChevronRight /></>}</button>
     </div>
   </div>
 }
@@ -91,7 +105,7 @@ function Profiles({ data, refresh }: { data: DashboardData; refresh: () => Promi
       <div className="profile-top"><div className="avatar">{profile.name.slice(0, 1)}</div><div><h3>{profile.name}</h3><p>{profile.targetRole} · {profile.experienceLevel}</p></div><button className="icon-button danger" onClick={async () => { if (confirm('프로필과 복사된 원본 자료를 삭제할까요?')) { await api.deleteProfile(profile.id); await refresh() } }}><Trash2 /></button></div>
       <div className="quality"><span>컨텍스트 완성도</span><strong className={profile.completeness < 60 ? 'warn-text' : ''}>{profile.completeness}%</strong><div><i style={{ width: `${profile.completeness}%` }} /></div></div>
       {profile.completeness < 60 && <p className="warning"><AlertTriangle /> 부족: {profile.missingSections.join(', ')}</p>}
-      <div className="source-count"><FileText /> 자료 {profile.sources.length}개{profile.sources.some((source) => source.extractionError) && <span className="source-error"> · URL/파일 재수집 필요</span>}</div><button className="secondary wide" onClick={() => setEditing(profile)}>컨텍스트 검토·수정</button>
+      <div className="source-count"><FileText /> 자료 {profile.sources.length}개 · 성공 {profile.sources.filter((source) => !source.extractionError).length}개{profile.sources.some((source) => source.extractionError) && <span className="source-error"> · 실패 {profile.sources.filter((source) => source.extractionError).length}개</span>}</div><button className="secondary wide" onClick={() => setEditing(profile)}>컨텍스트와 수집 결과</button>
     </article>)}</div>
     {!data.profiles.length && <EmptyState title="첫 프로필을 만드세요" body="이력서와 포트폴리오를 올리면 면접관이 경력을 이해합니다." action="프로필 추가" to="#" />}
     {creating && <ProfileModal provider={data.settings.defaultProvider} close={() => setCreating(false)} done={async () => { setCreating(false); await refresh() }} />}
@@ -105,22 +119,27 @@ function ProfileModal({ provider, close, done }: { provider: Provider; close: ()
     event.preventDefault(); setBusy(true); setError('')
     const form = new FormData(event.currentTarget)
     try {
-      await api.createProfile({ name: String(form.get('name')), targetRole: String(form.get('role')), experienceLevel: String(form.get('level')), filePaths: files, urls: String(form.get('urls')).split('\n').map((item) => item.trim()).filter(Boolean), provider })
+      await api.createProfile({ name: String(form.get('name')), targetRole: String(form.get('role')), experienceLevel: String(form.get('level')), filePaths: files, urls: String(form.get('urls')).split('\n').map((item) => item.trim()).filter(Boolean), provider, manualContext: String(form.get('manualContext') ?? '') })
       await done()
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); setBusy(false) }
   }
   return <div className="modal-backdrop"><form className="modal" onSubmit={submit}><button type="button" className="modal-close" onClick={close}><X /></button><div className="eyebrow">NEW CONTEXT</div><h2>새 지원 프로필</h2><p>자료가 다양할수록 맞춤 질문의 깊이가 높아집니다.</p>
     <label>이름<input required name="name" placeholder="홍길동" /></label><div className="form-row"><label>목표 직무<input required name="role" placeholder="게임 클라이언트 개발자" /></label><label>경력 수준<select name="level"><option>신입</option><option>1~3년</option><option>4~7년</option><option>8년 이상</option></select></label></div>
     <label>이력서·포트폴리오<button type="button" className="drop-zone" onClick={async () => setFiles(await api.selectProfileFiles())}><Download />{files.length ? `${files.length}개 파일 선택됨` : 'PDF, DOCX, TXT, 이미지 선택'}</button></label>
-    <label>공개 URL <small>한 줄에 하나</small><textarea name="urls" rows={3} placeholder="https://github.com/..." /></label>
+    <label>공개 URL <small>한 줄에 하나 · 직접 추출 실패 시 {providerLabel[provider]} 웹 수집으로 재시도</small><textarea name="urls" rows={3} placeholder="https://github.com/..." /></label>
+    <label>직접 보완 설명 <small>Notion을 읽지 못하면 본문을 붙여 넣거나 핵심 역할·성과를 적어주세요.</small><textarea name="manualContext" rows={5} placeholder="프로젝트에서 맡은 역할, 사용 기술, 수치 성과, 해결한 문제…" /></label>
     {error && <p className="error"><AlertTriangle />{error}</p>}<button className="primary wide" disabled={busy}>{busy ? <><LoaderCircle className="spin" /> 자료 분석 중…</> : '프로필 생성'}</button>
   </form></div>
 }
 
 function ContextModal({ profile, provider, close, done }: { profile: Profile; provider: Provider; close: () => void; done: () => Promise<void> }): JSX.Element {
-  const [context, setContext] = useState(profile.contextMarkdown), [busy, setBusy] = useState(false), [error, setError] = useState('')
-  return <div className="modal-backdrop"><div className="modal large"><button className="modal-close" onClick={close}><X /></button><div className="eyebrow">GENERATED CONTEXT</div><h2>{profile.name}의 면접 컨텍스트</h2><p>면접마다 선택한 CLI에 전달되는 정리 파일입니다.</p><textarea className="context-editor" value={context} onChange={(event) => setContext(event.target.value)} />
-    {error && <p className="error"><AlertTriangle />{error}</p>}<div className="button-row"><button className="secondary" disabled={busy} onClick={async () => { setBusy(true); setError(''); try { await api.regenerateProfile(profile.id, provider); await done() } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); setBusy(false) } }}>{busy ? <><LoaderCircle className="spin" /> 재생성 중…</> : '원본 다시 읽고 재생성'}</button><button className="primary" disabled={busy} onClick={async () => { setBusy(true); setError(''); try { await api.updateProfileContext(profile.id, context); await done() } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); setBusy(false) } }}>수정 내용 저장</button></div></div></div>
+  const [context, setContext] = useState(profile.contextMarkdown), [supplement, setSupplement] = useState(''), [busy, setBusy] = useState(false), [error, setError] = useState('')
+  const methodLabel = { file: '파일 추출', 'direct-url': '직접 URL 추출', 'llm-web': 'LLM 웹 수집', manual: '직접 설명' } as const
+  return <div className="modal-backdrop"><div className="modal large"><button className="modal-close" onClick={close}><X /></button><div className="eyebrow">GENERATED CONTEXT</div><h2>{profile.name}의 면접 컨텍스트</h2><p>면접마다 선택한 CLI에 전달되는 정리 파일입니다.</p>
+    <section className="context-sources"><h3>자료 수집 결과</h3>{profile.sources.map((source) => <div className={source.extractionError ? 'failed' : 'collected'} key={source.id}>{source.extractionError ? <X /> : <Check />}<span><strong>{source.title}</strong><small>{methodLabel[source.collectionMethod ?? (source.kind === 'file' ? 'file' : source.kind === 'manual' ? 'manual' : 'direct-url')]} · {source.extractedText.length.toLocaleString()}자</small><em>{source.extractionError ?? source.collectionWarning ?? source.location}</em></span></div>)}</section>
+    {!!profile.followUpQuestions?.length && <section className="follow-up-box"><h3>LLM이 확인하고 싶은 정보</h3><ul>{profile.followUpQuestions.map((question) => <li key={question}>{question}</li>)}</ul><textarea rows={5} value={supplement} onChange={(event) => setSupplement(event.target.value)} placeholder="질문에 대한 답변을 자유롭게 입력하세요. 답변은 로컬 원본으로 보존되고 컨텍스트에 다시 반영됩니다." /><button className="secondary wide" disabled={busy || !supplement.trim()} onClick={async () => { setBusy(true); setError(''); try { await api.supplementProfile(profile.id, provider, supplement); await done() } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); setBusy(false) } }}><Sparkles /> 보완 답변을 LLM에 반영</button></section>}
+    <textarea className="context-editor" value={context} onChange={(event) => setContext(event.target.value)} />
+    {error && <p className="error"><AlertTriangle />{error}</p>}<div className="button-row"><button className="secondary" disabled={busy} onClick={async () => { setBusy(true); setError(''); try { await api.regenerateProfile(profile.id, provider); await done() } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); setBusy(false) } }}>{busy ? <><LoaderCircle className="spin" /> 수집·재생성 중…</> : '원본과 URL 다시 수집'}</button><button className="primary" disabled={busy} onClick={async () => { setBusy(true); setError(''); try { await api.updateProfileContext(profile.id, context); await done() } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); setBusy(false) } }}>수정 내용 저장</button></div></div></div>
 }
 
 function NewSession({ data, refresh }: { data: DashboardData; refresh: () => Promise<void> }): JSX.Element {
@@ -352,7 +371,7 @@ export function App(): JSX.Element {
   const refresh = useCallback(async () => setData(await api.bootstrap()), [])
   useEffect(() => { void refresh() }, [refresh])
   if (!data) return <LoadingScreen />
-  if (!data.settings.consentAccepted) return <Onboarding onComplete={refresh} />
+  if (!data.settings.consentAccepted || !data.settings.cliVerified) return <Onboarding settings={data.settings} onComplete={refresh} />
   return <Routes><Route element={<Shell><RoutesOutlet /></Shell>}>
     <Route index element={<Dashboard data={data} />} />
     <Route path="profiles" element={<Profiles data={data} refresh={refresh} />} />

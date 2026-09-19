@@ -53,6 +53,10 @@ export class AppDatabase {
       CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value_json TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS turns_session_idx ON turns(session_id, created_at);
     `)
+    const profileColumns = this.db.prepare('PRAGMA table_info(profiles)').all() as Array<{ name: string }>
+    if (!profileColumns.some((column) => column.name === 'follow_up_questions_json')) {
+      this.db.exec("ALTER TABLE profiles ADD COLUMN follow_up_questions_json TEXT NOT NULL DEFAULT '[]'")
+    }
   }
 
   getSettings(): AppSettings {
@@ -75,6 +79,7 @@ export class AppDatabase {
       id: row.id, name: row.name, targetRole: row.target_role, experienceLevel: row.experience_level,
       contextMarkdown: row.context_markdown, completeness: row.completeness,
       missingSections: json(row.missing_sections_json, []), sources: json(row.sources_json, []),
+      followUpQuestions: json(row.follow_up_questions_json, []),
       createdAt: row.created_at, updatedAt: row.updated_at
     }))
   }
@@ -82,10 +87,14 @@ export class AppDatabase {
   getProfile(id: string): Profile | null { return this.listProfiles().find((profile) => profile.id === id) ?? null }
 
   saveProfile(profile: Profile): Profile {
-    this.db.prepare(`INSERT INTO profiles VALUES (@id,@name,@targetRole,@experienceLevel,@contextMarkdown,@completeness,@missing,@sources,@createdAt,@updatedAt)
+    this.db.prepare(`INSERT INTO profiles(
+        id,name,target_role,experience_level,context_markdown,completeness,missing_sections_json,sources_json,created_at,updated_at,follow_up_questions_json
+      ) VALUES (@id,@name,@targetRole,@experienceLevel,@contextMarkdown,@completeness,@missing,@sources,@createdAt,@updatedAt,@followUpQuestions)
       ON CONFLICT(id) DO UPDATE SET name=@name,target_role=@targetRole,experience_level=@experienceLevel,context_markdown=@contextMarkdown,
-      completeness=@completeness,missing_sections_json=@missing,sources_json=@sources,updated_at=@updatedAt`).run({
-      ...profile, missing: JSON.stringify(profile.missingSections), sources: JSON.stringify(profile.sources)
+      completeness=@completeness,missing_sections_json=@missing,sources_json=@sources,updated_at=@updatedAt,
+      follow_up_questions_json=@followUpQuestions`).run({
+      ...profile, missing: JSON.stringify(profile.missingSections), sources: JSON.stringify(profile.sources),
+      followUpQuestions: JSON.stringify(profile.followUpQuestions)
     })
     return profile
   }

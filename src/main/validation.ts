@@ -4,7 +4,8 @@ import { providerSchema } from '../shared/contracts.js'
 export const createProfileSchema = z.object({
   name: z.string().trim().min(1).max(80), targetRole: z.string().trim().min(1).max(120),
   experienceLevel: z.string().trim().min(1).max(80), filePaths: z.array(z.string()).max(20),
-  urls: z.array(z.string().url()).max(10), provider: providerSchema
+  urls: z.array(z.string().url()).max(10), provider: providerSchema,
+  manualContext: z.string().max(120_000).default('')
 })
 
 export const idSchema = z.string().uuid()

@@ -56,7 +56,7 @@ describe('profile URL import', () => {
         cliInput = input
         return {
           markdown: '# 홍진호\n\n## 경력과 역할\nUnity 개발자\n## 기술 스택\nC#\n## 프로젝트\n강한 토끼만이 살아남는다\n## 성과\n출시 성과\n## 문제 해결 사례\nJenkins CI/CD로 빌드 문제 해결',
-          completeness: 1,
+          completeness: 100,
           missingSections: []
         }
       })
@@ -103,7 +103,40 @@ describe('profile URL import', () => {
       name: '홍진호', targetRole: '게임 클라이언트 개발자', experienceLevel: '1~3년',
       filePaths: [], urls: ['https://hongjinho.dev/'], provider: 'codex'
     })).rejects.toThrow('본문을 읽지 못했습니다')
-    expect(adapter.invokeStructured).not.toHaveBeenCalled()
+    expect(adapter.invokeStructured).toHaveBeenCalledOnce()
+  })
+
+  it('falls back to the selected LLM web collector when direct HTML extraction fails', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'interview-profile-url-'))
+    roots.push(root)
+    const adapter = {
+      invokeStructured: vi.fn(async (task: string, ..._args: unknown[]) => task.includes('공개 URL 자료를 수집')
+        ? {
+            title: '동적 Notion 포트폴리오',
+            text: 'Unity C# 개발 경력과 프로젝트 역할, 성능 개선 성과, 빌드 장애 문제 해결 사례를 정리한 공개 페이지입니다. 클라이언트 구조 설계와 최적화, 협업 자동화, 출시 과정에서 담당한 구체적인 업무와 결과를 포함합니다.',
+            sourceUrls: ['https://portfolio.notion.site/example']
+          }
+        : {
+            markdown: '## 경력과 역할\nUnity 개발자\n## 기술 스택\nC#\n## 프로젝트\nNotion 프로젝트\n## 성과\n성능 개선\n## 문제 해결 사례\n빌드 장애 해결',
+            completeness: 100, missingSections: [], followUpQuestions: []
+          })
+    }
+    const db = { root, saveProfile: (profile: unknown) => profile } as unknown as AppDatabase
+    const cli = { get: () => adapter } as unknown as CliRegistry
+    const urlReader = { read: vi.fn(async () => { throw new Error('페이지에서 읽을 수 있는 본문을 찾지 못했습니다.') }) }
+    const service = new ProfileService(db, cli, urlReader)
+
+    const profile = await service.create({
+      name: '홍진호', targetRole: '게임 클라이언트 개발자', experienceLevel: '1~3년',
+      filePaths: [], urls: ['https://portfolio.notion.site/example'], provider: 'codex', manualContext: ''
+    })
+
+    expect(profile.sources[0]).toMatchObject({
+      collectionMethod: 'llm-web', extractionError: null,
+      location: 'https://portfolio.notion.site/example'
+    })
+    expect(profile.sources[0].extractedText).toContain('Unity C# 개발 경력')
+    expect((adapter.invokeStructured.mock.calls[0] as unknown[])[4]).toMatchObject({ allowWeb: true, timeoutMs: 120_000 })
   })
 
   it('re-fetches an existing URL-only profile and replaces its empty source text', async () => {
@@ -123,7 +156,7 @@ describe('profile URL import', () => {
     } as unknown as AppDatabase
     const adapter = { invokeStructured: vi.fn(async () => ({
       markdown: '## 경력과 역할\nUnity 개발자\n## 기술 스택\nC#\n## 프로젝트\n게임 출시\n## 성과\n수상\n## 문제 해결 사례\nCI/CD 문제 해결',
-      completeness: 1, missingSections: []
+      completeness: 100, missingSections: [], followUpQuestions: []
     })) }
     const cli = { get: () => adapter } as unknown as CliRegistry
     const urlReader = { read: vi.fn(async () => ({ title: '홍진호 | 포트폴리오', finalUrl: 'https://hongjinho.dev/', text: 'Unity C# 프로젝트 출시 수상 문제 해결 경력 역할 기술 스택' })) }
@@ -150,7 +183,7 @@ describe('profile URL import', () => {
         ? { markdown: `요약 ${String((input as { chunkIndex: number }).chunkIndex)}: Unity 프로젝트 경력과 성과 및 문제 해결` }
         : {
             markdown: '## 경력과 역할\nUnity 개발자\n## 기술 스택\nC#\n## 프로젝트\n대형 프로젝트\n## 성과\n성능 개선\n## 문제 해결 사례\n빌드 장애 해결',
-            completeness: 100, missingSections: []
+            completeness: 100, missingSections: [], followUpQuestions: []
           })
     }
     const cli = { get: () => adapter } as unknown as CliRegistry

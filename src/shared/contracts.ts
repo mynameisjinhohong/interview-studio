@@ -15,11 +15,13 @@ export type SessionStatus = z.infer<typeof sessionStatusSchema>
 
 export const sourceSchema = z.object({
   id: z.string(),
-  kind: z.enum(['file', 'url']),
+  kind: z.enum(['file', 'url', 'manual']),
   title: z.string(),
   location: z.string(),
   extractedText: z.string().default(''),
   extractionError: z.string().nullable().optional(),
+  collectionMethod: z.enum(['file', 'direct-url', 'llm-web', 'manual']).optional(),
+  collectionWarning: z.string().nullable().optional(),
   createdAt: z.string()
 })
 
@@ -31,6 +33,7 @@ export const profileSchema = z.object({
   contextMarkdown: z.string(),
   completeness: z.number().min(0).max(100),
   missingSections: z.array(z.string()),
+  followUpQuestions: z.array(z.string()).default([]),
   sources: z.array(sourceSchema),
   createdAt: z.string(),
   updatedAt: z.string()
@@ -181,6 +184,7 @@ export type InterviewSession = z.infer<typeof sessionSchema>
 
 export const settingsSchema = z.object({
   consentAccepted: z.boolean().default(false),
+  cliVerified: z.boolean().default(false),
   defaultProvider: providerSchema.default('codex'),
   modelOverrides: z.record(providerSchema, z.string()).default({ codex: '', claude: '', gemini: '' }),
   ttsVoice: z.string().default(''),
@@ -215,6 +219,7 @@ export interface CreateProfileInput {
   filePaths: string[]
   urls: string[]
   provider: Provider
+  manualContext?: string
 }
 
 export interface CompleteTurnInput {
@@ -245,10 +250,12 @@ export interface InterviewStudioApi {
   selectJobPostFile(): Promise<{ name: string; text: string } | null>
   createProfile(input: CreateProfileInput): Promise<Profile>
   regenerateProfile(id: string, provider: Provider): Promise<Profile>
+  supplementProfile(id: string, provider: Provider, context: string): Promise<Profile>
   updateProfileContext(id: string, contextMarkdown: string): Promise<Profile>
   deleteProfile(id: string): Promise<void>
   saveSettings(settings: Partial<AppSettings>): Promise<AppSettings>
   probeClis(): Promise<CliProbeResult[]>
+  testCli(provider: Provider): Promise<{ ok: true }>
   prepareSession(config: SessionConfig): Promise<InterviewSession>
   retentionCandidate(): Promise<{ deletedTitle: string } | null>
   getSession(id: string): Promise<InterviewSession | null>

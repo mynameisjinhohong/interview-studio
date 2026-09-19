@@ -4,8 +4,15 @@ export const profileContextJsonSchema = {
   type: 'object', additionalProperties: false,
   properties: {
     markdown: { type: 'string' }, completeness: { type: 'number', minimum: 0, maximum: 100 },
-    missingSections: stringArray
-  }, required: ['markdown', 'completeness', 'missingSections']
+    missingSections: stringArray, followUpQuestions: stringArray
+  }, required: ['markdown', 'completeness', 'missingSections', 'followUpQuestions']
+} as const
+
+export const publicUrlContentJsonSchema = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    title: { type: 'string' }, text: { type: 'string' }, sourceUrls: stringArray
+  }, required: ['title', 'text', 'sourceUrls']
 } as const
 
 export const sourceDigestJsonSchema = {
