@@ -23,6 +23,23 @@ export interface TtsVoice {
   id: string
   name: string
   language: string
+  engine?: 'macos' | 'onecore' | 'sapi' | 'supertonic'
+  gender?: 'female' | 'male'
+}
+
+export interface TtsVoicePack {
+  id: string
+  name: string
+  description: string
+  downloadSizeMb: number
+  license: string
+  installed: boolean
+  voices: TtsVoice[]
+}
+
+export interface TtsVoiceCatalog {
+  installed: TtsVoice[]
+  packs: TtsVoicePack[]
 }
 
 export const sourceSchema = z.object({
@@ -280,6 +297,8 @@ export interface InterviewStudioApi {
   appendRecordingChunk(input: RecordingChunkInput): Promise<void>
   finalizeRecording(sessionId: string): Promise<string | null>
   listVoices(): Promise<TtsVoice[]>
+  getVoiceCatalog(): Promise<TtsVoiceCatalog>
+  installVoicePack(packId: string): Promise<TtsVoiceCatalog>
   renderSpeech(text: string, voice?: string, rate?: number): Promise<string>
   getMediaUrl(path: string): Promise<string>
   getSttStatus(): Promise<SttStatus>

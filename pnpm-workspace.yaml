@@ -4,4 +4,6 @@ allowBuilds:
   electron-winstaller: true
   esbuild: true
   ffmpeg-static: true
+  onnxruntime-node: true
+  protobufjs: true
   tesseract.js: true

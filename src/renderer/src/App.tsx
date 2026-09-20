@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import type {
   AppSettings, CliProbeResult, DashboardData, FollowUpDecision, InterviewQuestion,
-  InterviewSession, InterviewTurn, Profile, Provider, SessionConfig, SttStatus, TtsVoice
+  InterviewSession, InterviewTurn, Profile, Provider, SessionConfig, SttStatus, TtsVoiceCatalog
 } from '../../shared/contracts'
 import { ANSWER_LIMIT_SECONDS, answerWarning } from '../../shared/interview-rules'
 import { AudioSampleController, ExclusiveAudioPlayer } from '../../shared/audio-playback'
@@ -42,21 +42,37 @@ function Shell({ children }: { children: React.ReactNode }): JSX.Element {
   </div>
 }
 
+function VoiceCatalogView({ catalog, selectedVoice, installing, onSelect, onInstall }: {
+  catalog: TtsVoiceCatalog | null
+  selectedVoice: string
+  installing: string
+  onSelect: (voiceId: string) => void
+  onInstall: (packId: string) => Promise<void>
+}): JSX.Element {
+  const installed = koreanVoices(catalog?.installed ?? [])
+  return <div className="voice-catalog">
+    <div className="voice-catalog-heading"><strong>설치되어 사용 가능</strong><span>{installed.length}개</span></div>
+    {installed.length ? <div className="voice-inventory">{installed.map((voice) => <button type="button" key={voice.id} className={selectedVoice === voice.id ? 'selected' : ''} onClick={() => onSelect(voice.id)}><span><b>{voice.name}</b><small>{voiceQualityLabel(voice)} · {voice.language.replace('_', '-')}</small></span>{selectedVoice === voice.id && <Check />}</button>)}</div> : <div className="voice-empty">설치된 한국어 음성이 없습니다.</div>}
+    <div className="voice-catalog-heading"><strong>추가 가능한 고품질 음성</strong><span>{catalog?.packs.filter((pack) => !pack.installed).length ?? 0}팩</span></div>
+    <div className="voice-pack-list">{catalog?.packs.map((pack) => <div className={pack.installed ? 'voice-pack installed' : 'voice-pack'} key={pack.id}><div><b>{pack.name}</b><p>{pack.description}</p><small>{pack.voices.map((voice) => voice.name.replace('Supertonic ', '')).join(' · ')}</small><em>{pack.downloadSizeMb}MB · {pack.license}</em></div>{pack.installed ? <span className="pack-ready"><Check /> 설치됨</span> : <button type="button" disabled={!!installing} onClick={() => void onInstall(pack.id)}>{installing === pack.id ? <LoaderCircle className="spin" /> : <Download />}{installing === pack.id ? '다운로드 중…' : '다운로드'}</button>}</div>)}</div>
+  </div>
+}
+
 function Onboarding({ settings, onComplete }: { settings: AppSettings; onComplete: () => Promise<void> }): JSX.Element {
   const [accepted, setAccepted] = useState(settings.consentAccepted)
   const [selected, setSelected] = useState<Provider>(settings.defaultProvider)
   const [probes, setProbes] = useState<CliProbeResult[]>([])
-  const [voices, setVoices] = useState<TtsVoice[]>([]), [selectedVoice, setSelectedVoice] = useState(settings.ttsVoice)
+  const [voiceCatalog, setVoiceCatalog] = useState<TtsVoiceCatalog | null>(null), [selectedVoice, setSelectedVoice] = useState(settings.ttsVoice)
   const [voiceRate, setVoiceRate] = useState(settings.mediaSetupCompleted ? settings.ttsRate : 0.9), [voiceSamplePlayed, setVoiceSamplePlayed] = useState(false)
-  const [sttStatus, setSttStatus] = useState<SttStatus | null>(null), [busyModel, setBusyModel] = useState(false)
+  const [sttStatus, setSttStatus] = useState<SttStatus | null>(null), [busyModel, setBusyModel] = useState(false), [installingVoicePack, setInstallingVoicePack] = useState('')
   const [busy, setBusy] = useState(false), [error, setError] = useState('')
   const samplePlayer = useRef<ExclusiveAudioPlayer | null>(null)
   if (!samplePlayer.current) samplePlayer.current = new ExclusiveAudioPlayer((url) => new Audio(url))
   const probe = async () => { setError(''); setProbes(await api.probeClis()) }
   const refreshMedia = async () => {
-    const [availableVoices, status] = await Promise.all([api.listVoices(), api.getSttStatus()])
-    const availableKoreanVoices = koreanVoices(availableVoices)
-    setVoices(availableKoreanVoices)
+    const [catalog, status] = await Promise.all([api.getVoiceCatalog(), api.getSttStatus()])
+    const availableKoreanVoices = koreanVoices(catalog.installed)
+    setVoiceCatalog(catalog)
     setSelectedVoice((current) => availableKoreanVoices.some((voice) => voice.id === current) ? current : selectPreferredKoreanVoice(availableKoreanVoices) ?? '')
     setSttStatus(status)
   }
@@ -81,6 +97,16 @@ function Onboarding({ settings, onComplete }: { settings: AppSettings; onComplet
     try { await api.downloadSttModel(HIGH_QUALITY_STT_MODEL); setSttStatus(await api.getSttStatus()) }
     catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)) }
     finally { setBusyModel(false) }
+  }
+  const installVoicePack = async (packId: string) => {
+    setInstallingVoicePack(packId); setError(''); samplePlayer.current?.stop()
+    try {
+      const catalog = await api.installVoicePack(packId)
+      setVoiceCatalog(catalog)
+      const firstPackVoice = catalog.packs.find((pack) => pack.id === packId)?.voices[0]
+      if (firstPackVoice) { setSelectedVoice(firstPackVoice.id); setVoiceSamplePlayed(false) }
+    } catch (reason) { setError(`음성 팩 설치 실패: ${reason instanceof Error ? reason.message : String(reason)}`) }
+    finally { setInstallingVoicePack('') }
   }
   const submit = async () => {
     if (!ready) return
@@ -113,8 +139,9 @@ function Onboarding({ settings, onComplete }: { settings: AppSettings; onComplet
         <div className={`setup-status ${!sttError ? 'ready' : ''}`}><Mic /><span><b>whisper-cli</b><small>{sttStatus?.binary ?? '실행 파일을 찾지 못했습니다'}</small></span>{sttStatus?.binary ? <Check /> : <X />}</div>
         <div className={`setup-status ${sttStatus?.models.small ? 'ready' : ''}`}><Sparkles /><span><b>small 모델</b><small>{sttStatus?.models.small ? '설치됨 · 면접 전사 준비 완료' : '최초 1회 다운로드가 필요합니다'}</small></span>{sttStatus?.models.small ? <Check /> : <button disabled={busyModel || !sttStatus?.binary} onClick={downloadRecommendedModel}>{busyModel ? <LoaderCircle className="spin" /> : <Download />}{busyModel ? '다운로드 중…' : '다운로드'}</button>}</div>
       </div>
-      <div className="setup-section"><strong><span>3</span> 한국어 면접관 음성</strong><p>설치된 한국어 음성 중 품질이 높은 후보를 우선 선택합니다. 반드시 샘플을 들어보고 완료하세요.</p>
-        {voices.length ? <><label>면접관 음성<select value={selectedVoice} onChange={(event) => { setSelectedVoice(event.target.value); setVoiceSamplePlayed(false) }}>{voices.map((voice) => <option key={voice.id} value={voice.id}>{voice.name} · {voiceQualityLabel(voice)}</option>)}</select></label><label>말하기 속도<input type="range" min="0.8" max="1.2" step="0.1" value={voiceRate} onChange={(event) => { setVoiceRate(Number(event.target.value)); setVoiceSamplePlayed(false) }} /><span>{voiceRate}×</span></label><button className={`secondary wide ${voiceSamplePlayed ? 'verified' : ''}`} disabled={!selectedVoice} onClick={playVoiceSample}><Volume2 /> {voiceSamplePlayed ? '샘플 확인 완료' : '음성 샘플 듣기'}</button></> : <div className="setup-status"><Volume2 /><span><b>한국어 음성이 없습니다</b><small>Windows 또는 macOS 설정에서 한국어 음성을 설치한 뒤 다시 확인하세요.</small></span><button onClick={() => void refreshMedia()}><RefreshCw /> 다시 확인</button></div>}
+      <div className="setup-section"><strong><span>3</span> 한국어 면접관 음성</strong><p>운영체제 음성과 선택 설치형 로컬 AI 음성을 구분해 표시합니다. 원하는 음성을 고른 뒤 반드시 샘플을 들어보세요.</p>
+        <VoiceCatalogView catalog={voiceCatalog} selectedVoice={selectedVoice} installing={installingVoicePack} onSelect={(voiceId) => { setSelectedVoice(voiceId); setVoiceSamplePlayed(false) }} onInstall={installVoicePack} />
+        {selectedVoice ? <><label>말하기 속도<input type="range" min="0.8" max="1.2" step="0.1" value={voiceRate} onChange={(event) => { setVoiceRate(Number(event.target.value)); setVoiceSamplePlayed(false) }} /><span>{voiceRate}×</span></label><button className={`secondary wide ${voiceSamplePlayed ? 'verified' : ''}`} disabled={!selectedVoice || !!installingVoicePack} onClick={playVoiceSample}><Volume2 /> {voiceSamplePlayed ? '샘플 확인 완료' : '선택 음성 샘플 듣기'}</button></> : <div className="setup-status"><Volume2 /><span><b>사용 가능한 한국어 음성이 없습니다</b><small>위 고품질 음성 팩을 다운로드하거나 OS 음성을 설치한 뒤 다시 확인하세요.</small></span><button onClick={() => void refreshMedia()}><RefreshCw /> 다시 확인</button></div>}
       </div>
       {error && <p className="error"><AlertTriangle />{error}</p>}
       <button className="primary wide onboarding-start" disabled={!ready || busy || busyModel} onClick={submit}>{busy ? <><LoaderCircle className="spin" /> 최종 연결 확인 중…</> : <>모든 설정을 저장하고 시작 <ChevronRight /></>}</button>
@@ -488,7 +515,7 @@ function TranscriptEdit({ turn, close, save }: { turn: InterviewTurn; close: () 
 }
 
 function SettingsPage({ data, refresh }: { data: DashboardData; refresh: () => Promise<void> }): JSX.Element {
-  const [probes, setProbes] = useState<CliProbeResult[]>([]), [voices, setVoices] = useState<TtsVoice[]>([]), [stt, setStt] = useState<SttStatus | null>(null), [busyModel, setBusyModel] = useState('')
+  const [probes, setProbes] = useState<CliProbeResult[]>([]), [voiceCatalog, setVoiceCatalog] = useState<TtsVoiceCatalog | null>(null), [stt, setStt] = useState<SttStatus | null>(null), [busyModel, setBusyModel] = useState(''), [installingVoicePack, setInstallingVoicePack] = useState('')
   const [sampleError, setSampleError] = useState('')
   const sampleController = useRef<AudioSampleController | null>(null)
   if (!sampleController.current) {
@@ -498,14 +525,23 @@ function SettingsPage({ data, refresh }: { data: DashboardData; refresh: () => P
     )
   }
   useEffect(() => {
-    void Promise.all([api.probeClis().then(setProbes), api.listVoices().then(setVoices), api.getSttStatus().then(setStt)])
+    void Promise.all([api.probeClis().then(setProbes), api.getVoiceCatalog().then(setVoiceCatalog), api.getSttStatus().then(setStt)])
     return () => sampleController.current?.stop()
   }, [])
   const save = async (patch: Partial<AppSettings>) => { await api.saveSettings(patch); await refresh() }
-  const availableKoreanVoices = koreanVoices(voices)
+  const installVoicePack = async (packId: string) => {
+    setInstallingVoicePack(packId); setSampleError(''); sampleController.current?.stop()
+    try {
+      const catalog = await api.installVoicePack(packId)
+      setVoiceCatalog(catalog)
+      const firstVoice = catalog.packs.find((pack) => pack.id === packId)?.voices[0]
+      if (firstVoice) await save({ ttsVoice: firstVoice.id })
+    } catch (reason) { setSampleError(reason instanceof Error ? reason.message : String(reason)) }
+    finally { setInstallingVoicePack('') }
+  }
   return <div className="page"><header className="compact-header"><div><div className="eyebrow">SYSTEM</div><h1>설정과 진단</h1><p>AI CLI, 음성, 로컬 모델과 데이터 상태를 관리합니다.</p></div></header>
     <div className="settings-grid"><section><h2>AI CLI</h2><p>인증과 모델 외 사용자 규칙·플러그인은 적용하지 않습니다.</p><div className="probe-list">{(['codex', 'claude', 'gemini'] as Provider[]).map((provider) => { const item = probes.find((probe) => probe.provider === provider); const usable = !!item?.installed && !item.error && item.authenticated !== false; const detail = !item ? '확인 중…' : !item.installed ? '설치되지 않음' : item.error ? item.error : item.authenticated === false ? '인증 필요' : `${item.version} · 사용 가능`; return <label key={provider} className={data.settings.defaultProvider === provider ? 'active' : ''}><input type="radio" name="provider" checked={data.settings.defaultProvider === provider} onChange={() => void save({ defaultProvider: provider })} /><Bot /><span><strong>{providerLabel[provider]}</strong><small>{detail}</small></span><i className={usable ? 'ok' : ''}>{usable ? <Check /> : <X />}</i></label> })}</div><button className="secondary" onClick={async () => setProbes(await api.probeClis())}><RefreshCw /> 다시 확인</button></section>
-      <section><h2>면접관 음성</h2><p>최초 설정에서 확인한 한국어 음성입니다. 음성을 바꾼 뒤에는 샘플을 다시 확인하세요.</p><label>한국어 음성<select value={data.settings.ttsVoice} onChange={(event) => void save({ ttsVoice: event.target.value })}>{availableKoreanVoices.map((voice) => <option key={voice.id} value={voice.id}>{voice.name} · {voiceQualityLabel(voice)}</option>)}</select></label><label>말하기 속도<input type="range" min="0.7" max="1.4" step="0.1" value={data.settings.ttsRate} onChange={(event) => void save({ ttsRate: Number(event.target.value) })} /><span>{data.settings.ttsRate}×</span></label><button className="secondary" onClick={async () => { setSampleError(''); try { await sampleController.current?.replay() } catch (reason) { setSampleError(reason instanceof Error ? reason.message : String(reason)) } }}><Volume2 /> 음성 샘플</button>{sampleError && <p className="error"><AlertTriangle />음성 샘플 재생 실패: {sampleError}</p>}</section>
+      <section className="voice-settings"><h2>면접관 음성</h2><p>현재 설치된 음성과 추가 가능한 로컬 고품질 음성입니다. 목록에서 누르면 바로 기본 음성으로 적용됩니다.</p><VoiceCatalogView catalog={voiceCatalog} selectedVoice={data.settings.ttsVoice} installing={installingVoicePack} onSelect={(voiceId) => void save({ ttsVoice: voiceId })} onInstall={installVoicePack} /><label>말하기 속도<input type="range" min="0.7" max="1.4" step="0.1" value={data.settings.ttsRate} onChange={(event) => void save({ ttsRate: Number(event.target.value) })} /><span>{data.settings.ttsRate}×</span></label><button className="secondary" disabled={!data.settings.ttsVoice || !!installingVoicePack} onClick={async () => { setSampleError(''); try { await sampleController.current?.replay() } catch (reason) { setSampleError(reason instanceof Error ? reason.message : String(reason)) } }}><Volume2 /> 선택 음성 샘플</button>{sampleError && <p className="error"><AlertTriangle />음성 샘플 재생 실패: {sampleError}</p>}</section>
       <section><h2>로컬 음성 인식</h2><p>실행 파일: {stt?.binary ?? 'whisper-cli를 찾지 못했습니다'}</p><div className="model-list">{(['base', 'small', 'medium'] as const).map((model) => <div key={model}><span><strong>{model}</strong><small>{model === 'base' ? '빠름' : model === 'small' ? '권장 고품질' : '최고 정확도 · 느림'}</small></span>{stt?.models[model] ? <b><Check /> 설치됨</b> : <button disabled={!!busyModel} onClick={async () => { setBusyModel(model); setSampleError(''); try { await api.downloadSttModel(model); setStt(await api.getSttStatus()) } catch (reason) { setSampleError(reason instanceof Error ? reason.message : String(reason)) } finally { setBusyModel('') } }}>{busyModel === model ? <LoaderCircle className="spin" /> : <Download />} 다운로드</button>}</div>)}</div><label>기본 모델<select value={data.settings.sttModel} onChange={(event) => void save({ sttModel: event.target.value as AppSettings['sttModel'] })}><option>base</option><option>small</option><option>medium</option></select></label></section>
       <section className="danger-zone"><h2>로컬 데이터</h2><p>프로필, 원본 복사본, 세션, 영상, 모델과 집계 통계를 모두 삭제합니다. 복구할 수 없습니다.</p><button className="danger-button" onClick={async () => { if (confirm('Interview Studio의 모든 로컬 데이터를 영구 삭제할까요?')) { await api.deleteAllData(); await refresh() } }}><Trash2 /> 모든 데이터 삭제</button></section></div>
   </div>

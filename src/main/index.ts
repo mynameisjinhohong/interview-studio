@@ -135,6 +135,8 @@ app.whenReady().then(() => {
     return path
   })
   ipcMain.handle(IPC.listVoices, () => tts.voices())
+  ipcMain.handle(IPC.getVoiceCatalog, () => tts.catalog())
+  ipcMain.handle(IPC.installVoicePack, (_event, packId: string) => tts.installVoicePack(z.string().min(1).max(100).parse(packId)))
   ipcMain.handle(IPC.renderSpeech, async (_event, text: string, voice?: string, rate?: number) => {
     const settings = db.getSettings()
     const resolvedRate = rate === undefined ? settings.ttsRate : z.number().min(0.5).max(2).parse(rate)

@@ -9,6 +9,7 @@ const voiceScore = (voice: TtsVoice): number => {
   const label = `${voice.id} ${voice.name}`.toLowerCase()
   let score = isKoreanVoice(voice) ? 100 : 0
   if (/natural|premium|enhanced|sunhi|injoon/.test(label)) score += 50
+  if (voice.engine === 'supertonic') score += 45
   if (/onecore|windows 최신/.test(label)) score += 30
   if (/yuna|heami/.test(label)) score += 20
   if (/desktop|legacy/.test(label)) score -= 5
@@ -26,6 +27,7 @@ export const koreanVoices = (voices: TtsVoice[]): TtsVoice[] => voices.filter(is
 export const voiceQualityLabel = (voice: TtsVoice): string => {
   const label = `${voice.id} ${voice.name}`.toLowerCase()
   if (/natural|premium|enhanced|sunhi|injoon/.test(label)) return '자연 음성'
+  if (voice.engine === 'supertonic') return '로컬 AI 고품질'
   if (/onecore|windows 최신/.test(label)) return 'Windows 최신 음성'
   return '시스템 음성'
 }

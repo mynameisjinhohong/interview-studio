@@ -12,6 +12,7 @@ asarUnpack:
   - node_modules/@napi-rs/canvas/**/*
   - node_modules/@napi-rs/canvas-*/**/*
   - node_modules/@echogarden/windows-media-tts/addons/bin/*.node
+  - node_modules/onnxruntime-node/**/*
 extraResources:
   - from: build/sidecar
     to: sidecar
