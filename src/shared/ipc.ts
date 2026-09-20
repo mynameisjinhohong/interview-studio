@@ -4,7 +4,7 @@ export const IPC = {
   regenerateProfile: 'profile:regenerate', supplementProfile: 'profile:supplement', updateProfileContext: 'profile:update-context', deleteProfile: 'profile:delete', saveSettings: 'settings:save',
   probeClis: 'cli:probe', testCli: 'cli:test', prepareSession: 'session:prepare', cancelSessionPreparation: 'session:cancel-prepare', getSession: 'session:get',
   retentionCandidate: 'session:retention-candidate',
-  startSession: 'session:start', completeTurn: 'session:complete-turn', finishSession: 'session:finish',
+  startSession: 'session:start', completeTurn: 'session:complete-turn', finishSession: 'session:finish', cancelSessionEvaluation: 'session:cancel-evaluation',
   updateTranscript: 'session:update-transcript', appendRecordingChunk: 'recording:append',
   finalizeRecording: 'recording:finalize', listVoices: 'tts:voices', getVoiceCatalog: 'tts:catalog', installVoicePack: 'tts:install-pack', renderSpeech: 'tts:render',
   getMediaUrl: 'media:url', getSttStatus: 'stt:status', downloadSttModel: 'stt:download-model',

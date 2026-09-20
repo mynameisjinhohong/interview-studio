@@ -8,6 +8,7 @@ import { finalReportJsonSchema, followUpJsonSchema, questionPlanJsonSchema } fro
 import { normalizeFinalReport } from '../../shared/scoring.js'
 import { nextInterviewStatus } from '../../shared/interview-machine.js'
 import { MAX_FOLLOW_UPS, mustEndTopic } from '../../shared/interview-rules.js'
+import { collectRecentQuestionExclusions, resolveQuestionStrategy } from '../../shared/question-strategy.js'
 import { AppDatabase } from '../database.js'
 import { CliRegistry } from './cli-adapters.js'
 import { ResearchService } from './research-service.js'
@@ -35,6 +36,7 @@ export const latestTurnsByDepth = (turns: InterviewTurn[]): InterviewTurn[] => {
 
 export class InterviewService {
   private readonly activePreparations = new Map<string, AbortController>()
+  private readonly activeEvaluations = new Map<string, AbortController>()
 
   constructor(private db: AppDatabase, private cli: CliRegistry, private research: ResearchService, private stt: SttService) {}
 
@@ -49,6 +51,7 @@ export class InterviewService {
       throw new Error('선택한 프로필을 찾을 수 없습니다.')
     }
     this.db.enforceRetention()
+    const recentQuestionExclusions = collectRecentQuestionExclusions(this.db.listSessions(), config)
     let session = this.db.createSession(config)
     try {
       const research = await this.research.research(config, profile, config.forceResearch, controller.signal)
@@ -58,16 +61,30 @@ export class InterviewService {
         effectiveType = 'technical'
         effectiveStacks = research.inferredStacks.length ? research.inferredStacks : [config.role || profile.targetRole]
       }
+      const strategy = resolveQuestionStrategy(config, effectiveType)
+      const strategyPlanSchema = questionPlanSchema.superRefine((candidate, context) => {
+        if (candidate.questions.length !== config.questionCount) {
+          context.addIssue({ code: 'custom', message: `본 질문은 정확히 ${config.questionCount}개여야 합니다.` })
+          return
+        }
+        for (const category of ['cs', 'portfolio', 'fit'] as const) {
+          const actual = candidate.questions.filter((question) => question.category === category).length
+          if (actual !== strategy.counts[category]) {
+            context.addIssue({ code: 'custom', message: `${category} 질문은 ${strategy.counts[category]}개여야 하지만 ${actual}개입니다.` })
+          }
+        }
+      })
       const plan = await this.cli.get(config.provider).invokeStructured(
-        `한국어 ${effectiveType === 'company' ? '회사 맞춤' : '기술'} 면접의 본 질문 ${config.questionCount}개를 만드세요. 각 질문은 하나의 주제만 가져야 합니다. 질문 간 주제가 일부 겹치는 것은 허용합니다. suggestedFollowUps는 실제 답변이 없을 때만 참고할 예시이며 최대 4개입니다.`,
+        `한국어 ${effectiveType === 'company' ? '회사 맞춤' : '기술'} 면접의 본 질문 ${config.questionCount}개를 만드세요. 각 질문은 하나의 주제와 하나의 핵심 역량만 검증해야 합니다. 질문 계획 내부에서 핵심 역량과 질문 각도를 중복하지 마세요. recentQuestionExclusions와는 표현만 바꾸는 수준도 피하고, 같은 분야가 꼭 필요하면 난이도·상황·검증 관점을 실질적으로 다르게 만드세요. questionStrategy.counts의 문항 수를 지키세요. CS는 자료구조·알고리즘·운영체제·네트워크·언어/런타임·동시성·메모리·설계 원칙 등 직무 기본기, portfolio는 실제 프로젝트의 선택·트레이드오프·성과·문제 해결, fit은 협업·행동·회사/직무 적합성을 의미합니다. suggestedFollowUps는 실제 답변이 없을 때만 참고할 예시이며 최대 4개입니다.`,
         {
           mode: config.mode, experienceLevel: config.experienceLevel, stacks: effectiveStacks,
           focusAreas: config.focusAreas, excludedAreas: config.excludedAreas,
-          company: effectiveType === 'company' ? config.company : '', role: config.role,
+          company: effectiveType === 'company' ? config.company : '', role: config.role, stage: config.stage,
+          questionStrategy: strategy, recentQuestionExclusions,
           profileContext: profile.contextMarkdown.slice(0, 24_000), research: research.summary,
           sources: research.sources.map(({ title, url, summary }) => ({ title, url, summary }))
         },
-        questionPlanJsonSchema, questionPlanSchema,
+        questionPlanJsonSchema, strategyPlanSchema,
         { model: config.modelOverride, timeoutMs: null, idleTimeoutMs: null, signal: controller.signal }
       )
       const normalizedPlan = normalizePlan(plan, config.questionCount)
@@ -147,24 +164,36 @@ export class InterviewService {
     return { turn, decision }
   }
 
-  async finish(id: string, partialReason?: string): Promise<InterviewSession> {
+  async finish(id: string, partialReason?: string, requestId: string = crypto.randomUUID()): Promise<InterviewSession> {
+    if (this.activeEvaluations.has(requestId)) throw new Error('이미 진행 중인 최종 평가 요청입니다.')
     const session = this.db.getSession(id)
     if (!session?.questionPlan) throw new Error('세션을 찾을 수 없습니다.')
+    const controller = new AbortController()
+    this.activeEvaluations.set(requestId, controller)
     let report: FinalReport
     let evaluationFailure = ''
-    try { report = await this.evaluate(session) }
+    try { report = await this.evaluate(session, controller.signal) }
     catch (error) {
-      evaluationFailure = error instanceof Error ? error.message : String(error)
+      evaluationFailure = controller.signal.aborted ? '사용자가 최종 평가를 취소했습니다.' : error instanceof Error ? error.message : String(error)
       report = normalizeFinalReport({
         totalScore: 0,
         summary: 'LLM 평가를 완료하지 못했습니다. 완료된 답변과 영상은 보존되었습니다.',
         strengths: [], improvements: ['CLI 상태를 확인한 뒤 전사를 수정해 재평가하세요.'], topics: []
       }, session.questionPlan.questions.map((question) => question.topic))
+    } finally {
+      if (this.activeEvaluations.get(requestId) === controller) this.activeEvaluations.delete(requestId)
     }
     const errorReason = [partialReason, evaluationFailure && `평가 실패: ${evaluationFailure}`].filter(Boolean).join(' · ')
     return this.db.updateSession(id, {
       report, status: errorReason ? 'partial' : 'completed', errorReason: errorReason || session.errorReason, completedAt: new Date().toISOString()
     })
+  }
+
+  cancelEvaluation(requestId: string): boolean {
+    const controller = this.activeEvaluations.get(requestId)
+    if (!controller) return false
+    controller.abort()
+    return true
   }
 
   async reevaluateAfterTranscript(turnId: string, transcript: string): Promise<InterviewSession> {
@@ -174,7 +203,7 @@ export class InterviewService {
     return this.db.updateSession(session.id, { report })
   }
 
-  private async evaluate(session: InterviewSession): Promise<FinalReport> {
+  private async evaluate(session: InterviewSession, signal?: AbortSignal): Promise<FinalReport> {
     const questions = session.questionPlan!.questions
     const chains = questions.map((question) => ({
       topic: question.topic, question: question.question,
@@ -184,7 +213,7 @@ export class InterviewService {
       '면접 결과를 한국어로 평가하세요. 각 본 질문 체인을 동일 가중치로 평가하세요. 무응답 체인은 0점입니다. 기준은 질문 이해·관련성 25, 근거·구체성 25, 논리·깊이 25, 전달 구조 15, 간결성·시간 관리 10입니다. 답변에 없는 사실을 칭찬하거나 꾸미지 말고 구체적 근거를 제시하세요.',
       { effectiveType: session.effectiveType, mode: session.config.mode, chains },
       finalReportJsonSchema, finalReportSchema,
-      { model: session.config.modelOverride }
+      { model: session.config.modelOverride, timeoutMs: null, idleTimeoutMs: null, signal }
     )
     return normalizeFinalReport(report, questions.map((question) => question.topic))
   }

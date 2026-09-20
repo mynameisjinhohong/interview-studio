@@ -249,7 +249,8 @@ function NewSession({ data, refresh }: { data: DashboardData; refresh: () => Pro
       provider: String(form.get('provider')) as Provider, modelOverride: String(form.get('modelOverride') ?? '') || undefined,
       questionCount: Number(form.get('questionCount')), stacks: list('stacks'), experienceLevel: String(form.get('level')),
       focusAreas: list('focus'), excludedAreas: list('exclude'), company: String(form.get('company') ?? ''), role: String(form.get('role') ?? ''),
-      stage: String(form.get('stage') ?? ''), jobPostText: String(form.get('jobPostText') ?? ''), jobPostUrl: String(form.get('jobPostUrl') ?? ''),
+      stage: String(form.get('stage') ?? ''), questionFocus: String(form.get('questionFocus') ?? 'auto') as SessionConfig['questionFocus'],
+      jobPostText: String(form.get('jobPostText') ?? ''), jobPostUrl: String(form.get('jobPostUrl') ?? ''),
       forceResearch: form.get('forceResearch') === 'on'
     }
     try {
@@ -281,8 +282,8 @@ function NewSession({ data, refresh }: { data: DashboardData; refresh: () => Pro
   }
   return <div className="page"><header className="compact-header"><div><div className="eyebrow">CREATE SESSION</div><h1>새 면접 만들기</h1><p>면접관이 자료를 조사하고 질문 목록을 준비합니다.</p></div></header>
     <form className="session-form" onSubmit={submit}><section><h2>1. 면접 종류</h2><div className="choice-grid"><button type="button" className={type === 'technical' ? 'selected' : ''} onClick={() => setType('technical')}><Bot /><strong>기술 면접</strong><span>기술 스택과 집중 영역 중심</span></button><button type="button" className={type === 'company' ? 'selected' : ''} onClick={() => setType('company')}><Building2 /><strong>회사 면접</strong><span>회사·공고·전형 맞춤 조사</span></button></div></section>
-      <section><h2>2. 기본 설정</h2><div className="form-grid"><label>지원 프로필<select name="profileId">{data.profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name} · {profile.targetRole}</option>)}</select></label><label>진행 모드<select name="mode"><option value="practice">연습 · 즉시 피드백</option><option value="real">실전 · 종료 후 피드백</option></select></label><label>AI CLI<select name="provider" defaultValue={data.settings.defaultProvider}>{Object.entries(providerLabel).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><label>본 질문 개수<input name="questionCount" type="number" min="3" max="10" defaultValue="5" /></label><label>경력 수준<select name="level"><option>신입</option><option>1~3년</option><option>4~7년</option><option>8년 이상</option></select></label><label>모델 override <small>선택</small><input name="modelOverride" placeholder="CLI 기본 모델 사용" /></label></div></section>
-      <section><h2>3. 면접 범위</h2>{type === 'technical' ? <div className="form-grid"><label className="full">기술 스택 <small>쉼표로 구분</small><input required name="stacks" placeholder="Unity, C#, URP" /></label><label>집중 영역<input name="focus" defaultValue={searchParams.get('focus') ?? ''} placeholder="메모리 최적화, 아키텍처" /></label><label>제외 영역<input name="exclude" placeholder="네트워크" /></label></div> : <div className="form-grid"><label>회사<input required name="company" placeholder="넥슨" /></label><label>직무<input required name="role" placeholder="게임 클라이언트 개발" /></label><label>전형 단계<select name="stage"><option>1차 직무 면접</option><option>2차 면접</option><option>임원 면접</option><option>알 수 없음</option></select></label><label>채용 공고 URL<input name="jobPostUrl" type="url" placeholder="https://..." /></label><label className="full">채용 공고 파일<button type="button" className="drop-zone compact" onClick={async () => { const selected = await api.selectJobPostFile(); if (selected) { setJobPostText(selected.text); setJobPostName(selected.name) } }}><Download />{jobPostName || 'PDF, DOCX, TXT 또는 이미지 선택'}</button></label><label className="full">채용 공고 본문<textarea name="jobPostText" rows={5} value={jobPostText} onChange={(event) => setJobPostText(event.target.value)} placeholder="공고 내용을 붙여 넣으면 정확도가 높아집니다." /></label></div>}<label className="check inline-check"><input type="checkbox" name="forceResearch" /><span><Check /></span> 캐시를 무시하고 공개 자료를 새로 조사</label></section>
+      <section><h2>2. 기본 설정</h2><div className="form-grid"><label>지원 프로필<select name="profileId">{data.profiles.map((profile) => <option key={profile.id} value={profile.id}>{profile.name} · {profile.targetRole}</option>)}</select></label><label>진행 모드<select name="mode"><option value="practice">연습 · 즉시 피드백</option><option value="real">실전 · 종료 후 피드백</option></select></label><label>AI CLI<select name="provider" defaultValue={data.settings.defaultProvider}>{Object.entries(providerLabel).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><label>본 질문 개수<input name="questionCount" type="number" min="3" max="10" defaultValue="5" /></label><label>경력 수준<select name="level"><option>신입</option><option>1~3년</option><option>4~7년</option><option>8년 이상</option></select></label><label>질문 초점<select name="questionFocus"><option value="auto">자동 추천 · 전형/면접 종류 반영</option><option value="balanced">기초 CS·포트폴리오 균형</option><option value="cs">기초 CS·기술 기본기 중심</option><option value="portfolio">포트폴리오·프로젝트 심층 중심</option></select></label><label>모델 override <small>선택</small><input name="modelOverride" placeholder="CLI 기본 모델 사용" /></label></div></section>
+      <section><h2>3. 면접 범위</h2>{type === 'technical' ? <div className="form-grid"><label className="full">기술 스택 <small>쉼표로 구분</small><input required name="stacks" placeholder="Unity, C#, URP" /></label><label>집중 영역<input name="focus" defaultValue={searchParams.get('focus') ?? ''} placeholder="메모리 최적화, 아키텍처" /></label><label>제외 영역<input name="exclude" placeholder="네트워크" /></label></div> : <div className="form-grid"><label>회사<input required name="company" placeholder="넥슨" /></label><label>직무<input required name="role" placeholder="게임 클라이언트 개발" /></label><label>전형 단계<select name="stage"><option>1차 직무 면접 · CS/기본기 중심</option><option>2차 면접 · 프로젝트 심층 중심</option><option>임원 면접 · 협업/적합성 중심</option><option>알 수 없음 · 균형 구성</option></select></label><label>채용 공고 URL<input name="jobPostUrl" type="url" placeholder="https://..." /></label><label className="full">채용 공고 파일<button type="button" className="drop-zone compact" onClick={async () => { const selected = await api.selectJobPostFile(); if (selected) { setJobPostText(selected.text); setJobPostName(selected.name) } }}><Download />{jobPostName || 'PDF, DOCX, TXT 또는 이미지 선택'}</button></label><label className="full">채용 공고 본문<textarea name="jobPostText" rows={5} value={jobPostText} onChange={(event) => setJobPostText(event.target.value)} placeholder="공고 내용을 붙여 넣으면 정확도가 높아집니다." /></label></div>}<label className="check inline-check"><input type="checkbox" name="forceResearch" /><span><Check /></span> 캐시를 무시하고 공개 자료를 새로 조사</label></section>
       {error && <p className="error"><AlertTriangle />{error}</p>}{busy ? <div className="preparation-status"><LoaderCircle className="spin" /><span><strong>웹 자료 조사와 질문 생성 중…</strong><small>{formatTime(elapsed)} 경과 · 완료될 때까지 계속 기다립니다.</small></span><button type="button" className="danger-button" disabled={cancelling} onClick={cancelPreparation}><Square />{cancelling ? '취소 중…' : '준비 취소'}</button></div> : <button className="primary prepare"><Sparkles /> 면접 준비하기</button>}
     </form>
   </div>
@@ -294,13 +295,15 @@ function InterviewRoom(): JSX.Element {
   const [sttStatus, setSttStatus] = useState<SttStatus | null>(null), [sttModel, setSttModel] = useState<AppSettings['sttModel']>('small')
   const [busyModel, setBusyModel] = useState(false), [voiceReady, setVoiceReady] = useState(false)
   const [micLevel, setMicLevel] = useState(0), [micTestState, setMicTestState] = useState<'idle' | 'recording' | 'playing' | 'passed'>('idle')
-  const [phase, setPhase] = useState<'idle' | 'asking' | 'listening' | 'analyzing' | 'paused'>('idle')
+  const [phase, setPhase] = useState<'idle' | 'asking' | 'listening' | 'analyzing' | 'evaluating' | 'paused'>('idle')
   const [baseIndex, setBaseIndex] = useState(0), [depth, setDepth] = useState(0), [followUp, setFollowUp] = useState<string | null>(null)
   const [remaining, setRemaining] = useState(ANSWER_LIMIT_SECONDS), [revealed, setRevealed] = useState(false), [replayed, setReplayed] = useState(false)
+  const [evaluationElapsed, setEvaluationElapsed] = useState(0), [evaluationReady, setEvaluationReady] = useState(false), [cancellingEvaluation, setCancellingEvaluation] = useState(false)
   const [error, setError] = useState(''), [practiceReview, setPracticeReview] = useState<{ turn: InterviewTurn; decision: FollowUpDecision } | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null), streamRef = useRef<MediaStream | null>(null), recorderRef = useRef<MediaRecorder | null>(null)
   const answerRecorderRef = useRef<MediaRecorder | null>(null), answerChunksRef = useRef<Blob[]>([]), recordingSequence = useRef(0), answerStarted = useRef(Date.now()), audioUrlRef = useRef('')
   const micLevelRef = useRef(0), micContextRef = useRef<AudioContext | null>(null), micFrameRef = useRef<number | null>(null), micTestAudioRef = useRef<HTMLAudioElement | null>(null)
+  const evaluationRequest = useRef<string | null>(null), finishingRef = useRef(false)
   const deviceSamplePlayer = useRef<ExclusiveAudioPlayer | null>(null)
   if (!deviceSamplePlayer.current) deviceSamplePlayer.current = new ExclusiveAudioPlayer((url) => new Audio(url))
   const pendingRecordingChunks = useRef(new Set<Promise<void>>()), retriedAnswers = useRef(new Set<string>())
@@ -317,7 +320,8 @@ function InterviewRoom(): JSX.Element {
         } else if (questionIndex + 1 < item.questionPlan.questions.length) {
           setBaseIndex(questionIndex + 1); setDepth(0); setFollowUp(null)
         } else if (lastTurn.decisionAction === 'next') {
-          void api.finalizeRecording(item.id).then(() => api.finishSession(item.id, '앱 중단 후 완료 문항 기준으로 복구')).then((finished) => navigate(`/results/${finished.id}`, { replace: true }))
+          const requestId = crypto.randomUUID()
+          void api.finalizeRecording(item.id).then(() => api.finishSession(item.id, '앱 중단 후 완료 문항 기준으로 복구', requestId)).then((finished) => navigate(`/results/${finished.id}`, { replace: true }))
           return
         }
       }
@@ -336,12 +340,21 @@ function InterviewRoom(): JSX.Element {
     const timer = window.setInterval(() => setRemaining((value) => { if (value <= 1) { window.clearInterval(timer); void submitAnswer(true); return 0 } return value - 1 }), 1000)
     return () => window.clearInterval(timer)
   }, [phase])
+  useEffect(() => {
+    if (phase !== 'evaluating') { setEvaluationElapsed(0); return }
+    const startedAt = Date.now()
+    const update = () => setEvaluationElapsed(Math.floor((Date.now() - startedAt) / 1_000))
+    update()
+    const timer = window.setInterval(update, 1_000)
+    return () => window.clearInterval(timer)
+  }, [phase])
   useEffect(() => () => {
     streamRef.current?.getTracks().forEach((track) => track.stop())
     deviceSamplePlayer.current?.stop()
     micTestAudioRef.current?.pause()
     if (micFrameRef.current !== null) cancelAnimationFrame(micFrameRef.current)
     void micContextRef.current?.close()
+    if (evaluationRequest.current) void api.cancelSessionEvaluation(evaluationRequest.current)
   }, [])
 
   const currentBase = session?.questionPlan?.questions[baseIndex]
@@ -525,11 +538,44 @@ function InterviewRoom(): JSX.Element {
   const stopContinuous = async (): Promise<void> => {
     const recorder = recorderRef.current
     if (recorder && recorder.state !== 'inactive') await new Promise<void>((resolve) => { recorder.onstop = () => resolve(); recorder.stop() })
-    await Promise.all([...pendingRecordingChunks.current])
+    recorderRef.current = null
+  }
+  const releaseMediaDevices = async (): Promise<void> => {
+    streamRef.current?.getTracks().forEach((track) => track.stop())
+    streamRef.current = null
+    if (videoRef.current) videoRef.current.srcObject = null
+    if (micFrameRef.current !== null) { cancelAnimationFrame(micFrameRef.current); micFrameRef.current = null }
+    await micContextRef.current?.close()
+    micContextRef.current = null
+    setMicLevel(0)
   }
   const stopSession = async (reason?: string) => {
-    setPhase('analyzing'); await stopContinuous(); await api.finalizeRecording(id)
-    const completed = await api.finishSession(id, reason); streamRef.current?.getTracks().forEach((track) => track.stop()); navigate(`/results/${completed.id}`)
+    if (finishingRef.current) return
+    finishingRef.current = true; setPhase('evaluating'); setPracticeReview(null); setError('')
+    try {
+      const activeAnswer = answerRecorderRef.current
+      if (activeAnswer && activeAnswer.state !== 'inactive') activeAnswer.stop()
+      await stopContinuous()
+      await releaseMediaDevices()
+      await Promise.all([...pendingRecordingChunks.current])
+      await api.finalizeRecording(id)
+      const requestId = crypto.randomUUID()
+      evaluationRequest.current = requestId
+      setEvaluationReady(true)
+      const completed = await api.finishSession(id, reason, requestId)
+      evaluationRequest.current = null; setEvaluationReady(false)
+      navigate(`/results/${completed.id}`)
+    } catch (reason) {
+      evaluationRequest.current = null; finishingRef.current = false; setEvaluationReady(false); setCancellingEvaluation(false); setPhase('paused')
+      setError(`면접 종료 처리 실패: ${reason instanceof Error ? reason.message : String(reason)}`)
+    }
+  }
+  const cancelEvaluation = async () => {
+    const requestId = evaluationRequest.current
+    if (!requestId || cancellingEvaluation) return
+    setCancellingEvaluation(true)
+    try { await api.cancelSessionEvaluation(requestId) }
+    catch (reason) { setError(`평가 취소 실패: ${reason instanceof Error ? reason.message : String(reason)}`); setCancellingEvaluation(false) }
   }
 
   if (!session || !currentQuestion) return <LoadingScreen />
@@ -546,14 +592,15 @@ function InterviewRoom(): JSX.Element {
       {error && <p className="error"><AlertTriangle />{error}</p>}<button className="primary wide" disabled={!allReady || busyModel} onClick={begin}>{allReady ? '면접 시작' : '필수 점검을 완료하세요'}</button></div></div>
   }
 
-  return <div className="interview-screen"><div className="interview-top"><div><span className="live-dot" /> {session.config.mode === 'practice' ? '연습 면접' : '실전 면접'}</div><div>주제 {baseIndex + 1} / {session.questionPlan?.questions.length}<span className="divider" />꼬리 {depth} / 4</div><button onClick={() => void stopSession('사용자 중도 종료')}><Square /> 종료</button></div>
-    <div className="interview-stage"><div className={`ai-avatar ${phase}`}><div className="halo" /><div className="face"><i className="eye left" /><i className="eye right" /><i className="mouth" /></div><div className="sound-waves"><i /><i /><i /><i /><i /></div></div><h2>{phase === 'asking' ? '질문하고 있습니다' : phase === 'listening' ? '답변을 듣고 있습니다' : phase === 'analyzing' ? '답변을 분석하고 있습니다' : '면접이 잠시 멈췄습니다'}</h2>
+  return <div className="interview-screen"><div className="interview-top"><div><span className="live-dot" style={phase === 'evaluating' ? { background: '#62697e', boxShadow: 'none' } : undefined} /> {phase === 'evaluating' ? '최종 평가 · 입력 장치 해제' : session.config.mode === 'practice' ? '연습 면접' : '실전 면접'}</div><div>주제 {baseIndex + 1} / {session.questionPlan?.questions.length}<span className="divider" />꼬리 {depth} / 4</div><button disabled={phase === 'evaluating'} onClick={() => void stopSession('사용자 중도 종료')}><Square /> 종료</button></div>
+    <div className="interview-stage"><div className={`ai-avatar ${phase}`}><div className="halo" /><div className="face"><i className="eye left" /><i className="eye right" /><i className="mouth" /></div><div className="sound-waves"><i /><i /><i /><i /><i /></div></div><h2>{phase === 'asking' ? '질문하고 있습니다' : phase === 'listening' ? '답변을 듣고 있습니다' : phase === 'analyzing' ? '답변을 전사하고 다음 질문을 결정하고 있습니다' : phase === 'evaluating' ? '면접 전체 답변을 종합 평가하고 있습니다' : '면접이 잠시 멈췄습니다'}</h2>
       {revealed && <p className="question-text">{currentQuestion.question}</p>}
       {phase === 'listening' && <div className={`timer ${answerWarning(remaining) === 'ten-seconds' ? 'critical-time' : answerWarning(remaining) === 'one-minute' ? 'warning-time' : ''}`}><Clock3 /> {formatTime(remaining)}{answerWarning(remaining) !== 'none' && <small>{answerWarning(remaining) === 'ten-seconds' ? '곧 자동 제출됩니다' : '1분 이내에 마무리하세요'}</small>}</div>}
+      {phase === 'evaluating' && <div className="evaluation-status"><LoaderCircle className="spin" /><span><b>{formatTime(evaluationElapsed)} 경과</b><small>{evaluationReady ? '카메라와 마이크 연결은 해제되었습니다. 평가는 제한 없이 계속되며 원하면 취소할 수 있습니다.' : '카메라와 마이크를 해제하고 녹화 파일을 정리하고 있습니다.'}</small></span><button disabled={!evaluationReady || cancellingEvaluation} onClick={cancelEvaluation}>{cancellingEvaluation ? '취소 중…' : '평가 취소'}</button></div>}
       {error && <p className="error stage-error"><AlertTriangle />{error}</p>}
     </div>
-    <video className="self-view" ref={videoRef} muted playsInline />
-    <div className="interview-controls"><button disabled={revealed || phase === 'analyzing'} onClick={() => setRevealed(true)}><FileText /> 질문 보기</button><button disabled={replayed || phase !== 'listening'} onClick={async () => { setReplayed(true); await speak(currentQuestion.question, true) }}><Volume2 /> 다시 듣기</button>{session.config.mode === 'practice' && <button disabled={phase === 'analyzing'} onClick={() => { const recorder = answerRecorderRef.current; if (phase === 'paused') { recorder?.resume(); setPhase('listening') } else { recorder?.pause(); setPhase('paused') } }}>{phase === 'paused' ? <Play /> : <Pause />} {phase === 'paused' ? '계속' : '일시정지'}</button>}<button className="finish-answer" disabled={phase !== 'listening'} onClick={() => void submitAnswer(false)}><Square /> 답변 완료</button></div>
+    {phase !== 'evaluating' && <video className="self-view" ref={videoRef} muted playsInline />}
+    {phase !== 'evaluating' && <div className="interview-controls"><button disabled={revealed || phase === 'analyzing'} onClick={() => setRevealed(true)}><FileText /> 질문 보기</button><button disabled={replayed || phase !== 'listening'} onClick={async () => { setReplayed(true); await speak(currentQuestion.question, true) }}><Volume2 /> 다시 듣기</button>{session.config.mode === 'practice' && <button disabled={phase === 'analyzing'} onClick={() => { const recorder = answerRecorderRef.current; if (phase === 'paused') { recorder?.resume(); setPhase('listening') } else { recorder?.pause(); setPhase('paused') } }}>{phase === 'paused' ? <Play /> : <Pause />} {phase === 'paused' ? '계속' : '일시정지'}</button>}<button className="finish-answer" disabled={phase !== 'listening'} onClick={() => void submitAnswer(false)}><Square /> 답변 완료</button></div>}
     {practiceReview && <PracticeReview review={practiceReview} canRetry={!retriedAnswers.current.has(currentAnswerKey)} onContinue={async (transcript) => { if (transcript !== practiceReview.turn.transcript) await api.updateTranscript(practiceReview.turn.id, transcript); await advance(practiceReview.decision) }} onRetry={async () => { retriedAnswers.current.add(currentAnswerKey); setPracticeReview(null); audioUrlRef.current = ''; await speak(currentQuestion.question, false) }} />}
   </div>
 }

@@ -121,7 +121,10 @@ app.whenReady().then(() => {
       throw error
     }
   })
-  ipcMain.handle(IPC.finishSession, (_event, id: string, reason?: string) => interviews.finish(idSchema.parse(id), z.string().max(1_000).optional().parse(reason)))
+  ipcMain.handle(IPC.finishSession, (_event, id: string, reason: string | undefined, requestId: string) => interviews.finish(
+    idSchema.parse(id), z.string().max(1_000).optional().parse(reason), idSchema.parse(requestId)
+  ))
+  ipcMain.handle(IPC.cancelSessionEvaluation, (_event, requestId: string) => interviews.cancelEvaluation(idSchema.parse(requestId)))
   ipcMain.handle(IPC.updateTranscript, (_event, turnId: string, transcript: string) => interviews.reevaluateAfterTranscript(idSchema.parse(turnId), z.string().max(100_000).parse(transcript)))
   ipcMain.handle(IPC.appendRecordingChunk, (_event, input: RecordingChunkInput) => {
     const parsed = recordingChunkInputSchema.parse({ ...input, bytes: new Uint8Array(input.bytes) })

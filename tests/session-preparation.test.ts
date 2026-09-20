@@ -11,7 +11,7 @@ afterEach(() => roots.splice(0).forEach((root) => rmSync(root, { recursive: true
 
 const config: SessionConfig = {
   profileId: 'profile', type: 'technical', mode: 'practice', provider: 'codex', questionCount: 3,
-  stacks: ['C#'], experienceLevel: '신입', focusAreas: [], excludedAreas: [], company: '', role: '', stage: '',
+  stacks: ['C#'], experienceLevel: '신입', focusAreas: [], excludedAreas: [], company: '', role: '', stage: '', questionFocus: 'auto',
   jobPostText: '', jobPostUrl: '', forceResearch: false
 }
 
@@ -35,7 +35,7 @@ describe('session preparation execution policy', () => {
     const invokeStructured = vi.fn().mockResolvedValue({
       title: 'C# 면접',
       questions: [1, 2, 3].map((index) => ({
-        id: `q-${index}`, topic: `주제 ${index}`, question: `질문 ${index}`, intent: '검증', sourceUrls: [], suggestedFollowUps: []
+        id: `q-${index}`, category: index <= 2 ? 'cs' : 'portfolio', topic: `주제 ${index}`, question: `질문 ${index}`, intent: '검증', sourceUrls: [], suggestedFollowUps: []
       }))
     })
     const cli = { get: vi.fn(() => ({ invokeStructured })) }
@@ -47,6 +47,9 @@ describe('session preparation execution policy', () => {
     const signal = research.research.mock.calls[0]?.[3]
     expect(signal).toBeInstanceOf(AbortSignal)
     expect(invokeStructured.mock.calls[0]?.[4]).toMatchObject({ timeoutMs: null, idleTimeoutMs: null, signal })
+    expect(invokeStructured.mock.calls[0]?.[1]).toMatchObject({
+      stage: '', questionStrategy: { weights: { cs: 70, portfolio: 30, fit: 0 } }, recentQuestionExclusions: []
+    })
     db.close()
   })
 

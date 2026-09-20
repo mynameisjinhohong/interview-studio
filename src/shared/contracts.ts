@@ -96,6 +96,7 @@ export type ResearchSnapshot = z.infer<typeof researchSnapshotSchema>
 
 export const questionSchema = z.object({
   id: z.string(),
+  category: z.enum(['cs', 'portfolio', 'fit']),
   topic: z.string(),
   question: z.string(),
   intent: z.string(),
@@ -185,6 +186,7 @@ export const sessionConfigSchema = z.object({
   company: z.string().trim().max(160).default(''),
   role: z.string().trim().max(160).default(''),
   stage: z.string().trim().max(160).default(''),
+  questionFocus: z.enum(['auto', 'balanced', 'cs', 'portfolio']).default('auto'),
   jobPostText: z.string().max(120_000).default(''),
   jobPostUrl: z.union([z.literal(''), z.string().url().max(2_000)]).default(''),
   forceResearch: z.boolean().default(false)
@@ -292,7 +294,8 @@ export interface InterviewStudioApi {
   getSession(id: string): Promise<InterviewSession | null>
   startSession(id: string): Promise<InterviewSession>
   completeTurn(input: CompleteTurnInput): Promise<{ turn: InterviewTurn; decision: FollowUpDecision }>
-  finishSession(id: string, partialReason?: string): Promise<InterviewSession>
+  finishSession(id: string, partialReason: string | undefined, requestId: string): Promise<InterviewSession>
+  cancelSessionEvaluation(requestId: string): Promise<boolean>
   updateTranscript(turnId: string, transcript: string): Promise<InterviewSession>
   appendRecordingChunk(input: RecordingChunkInput): Promise<void>
   finalizeRecording(sessionId: string): Promise<string | null>
