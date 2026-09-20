@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@echogarden/windows-media-tts':
+        specifier: 0.1.2
+        version: 0.1.2
       '@napi-rs/canvas':
         specifier: ^0.1.80
         version: 0.1.100
@@ -255,6 +258,10 @@ packages:
 
   '@drizzle-team/brocli@0.10.2':
     resolution: {integrity: sha512-z33Il7l5dKjUgGULTqBsQBQwckHh5AbIuxhdsIxDDiZAzBOrZO6q9ogcWC65kU382AfynTfgNumVcNIjuIua6w==}
+
+  '@echogarden/windows-media-tts@0.1.2':
+    resolution: {integrity: sha512-4SRrSRzL5ATUKGgKGKIL0E0P1LZKRLkSgiPjAhEmZcBDM372pA2Xb/92bQf2RPLaTJCkL4WFBlFBdyrtFX8DlQ==}
+    engines: {node: '>=18'}
 
   '@electron-internal/extract-zip@1.0.5':
     resolution: {integrity: sha512-+bqFCP98pLI0Tt0XQo1TmlXtwjWchISndDOxCkEcIuUgXWpBnLyRI+2DU+mesvnMMX6L1XDqYNA0lXNDHd/yiA==}
@@ -2965,6 +2972,8 @@ snapshots:
 
   '@drizzle-team/brocli@0.10.2': {}
 
+  '@echogarden/windows-media-tts@0.1.2': {}
+
   '@electron-internal/extract-zip@1.0.5': {}
 
   '@electron-toolkit/preload@3.0.2(electron@44.3.0(supports-color@7.2.0))':
@@ -4337,7 +4346,7 @@ snapshots:
       es6-error: 4.1.1
       matcher: 3.0.0
       roarr: 2.15.4
-      semver: 7.7.4
+      semver: 7.8.5
       serialize-error: 7.0.1
     optional: true
 
@@ -4639,13 +4648,13 @@ snapshots:
 
   node-abi@4.35.0:
     dependencies:
-      semver: 7.7.4
+      semver: 7.8.5
 
   node-addon-api@8.9.2: {}
 
   node-api-version@0.2.1:
     dependencies:
-      semver: 7.7.4
+      semver: 7.8.5
 
   node-fetch@2.7.0:
     dependencies:
@@ -4658,7 +4667,7 @@ snapshots:
       graceful-fs: 4.2.11
       nopt: 9.0.0
       proc-log: 6.1.0
-      semver: 7.7.4
+      semver: 7.8.5
       tar: 7.5.22
       tinyglobby: 0.2.17
       undici: 6.28.1

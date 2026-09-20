@@ -7,10 +7,14 @@ import {
 } from 'lucide-react'
 import type {
   AppSettings, CliProbeResult, DashboardData, FollowUpDecision, InterviewQuestion,
-  InterviewSession, InterviewTurn, Profile, Provider, SessionConfig
+  InterviewSession, InterviewTurn, Profile, Provider, SessionConfig, SttStatus, TtsVoice
 } from '../../shared/contracts'
 import { ANSWER_LIMIT_SECONDS, answerWarning } from '../../shared/interview-rules'
 import { AudioSampleController, ExclusiveAudioPlayer } from '../../shared/audio-playback'
+import {
+  HIGH_QUALITY_STT_MODEL, canCompleteInitialSetup, interviewReadinessError,
+  koreanVoices, selectPreferredKoreanVoice, voiceQualityLabel
+} from '../../shared/setup-readiness'
 import interviewStudioLogo from './assets/interview-studio-logo.png'
 
 const api = window.interviewStudio
@@ -42,17 +46,56 @@ function Onboarding({ settings, onComplete }: { settings: AppSettings; onComplet
   const [accepted, setAccepted] = useState(settings.consentAccepted)
   const [selected, setSelected] = useState<Provider>(settings.defaultProvider)
   const [probes, setProbes] = useState<CliProbeResult[]>([])
+  const [voices, setVoices] = useState<TtsVoice[]>([]), [selectedVoice, setSelectedVoice] = useState(settings.ttsVoice)
+  const [voiceRate, setVoiceRate] = useState(settings.mediaSetupCompleted ? settings.ttsRate : 0.9), [voiceSamplePlayed, setVoiceSamplePlayed] = useState(false)
+  const [sttStatus, setSttStatus] = useState<SttStatus | null>(null), [busyModel, setBusyModel] = useState(false)
   const [busy, setBusy] = useState(false), [error, setError] = useState('')
+  const samplePlayer = useRef<ExclusiveAudioPlayer | null>(null)
+  if (!samplePlayer.current) samplePlayer.current = new ExclusiveAudioPlayer((url) => new Audio(url))
   const probe = async () => { setError(''); setProbes(await api.probeClis()) }
-  useEffect(() => { void probe() }, [])
+  const refreshMedia = async () => {
+    const [availableVoices, status] = await Promise.all([api.listVoices(), api.getSttStatus()])
+    const availableKoreanVoices = koreanVoices(availableVoices)
+    setVoices(availableKoreanVoices)
+    setSelectedVoice((current) => availableKoreanVoices.some((voice) => voice.id === current) ? current : selectPreferredKoreanVoice(availableKoreanVoices) ?? '')
+    setSttStatus(status)
+  }
+  useEffect(() => {
+    void Promise.all([probe(), refreshMedia()]).catch((reason) => setError(reason instanceof Error ? reason.message : String(reason)))
+    return () => samplePlayer.current?.stop()
+  }, [])
   const selectedProbe = probes.find((item) => item.provider === selected)
   const usable = !!selectedProbe?.installed && !selectedProbe.error && selectedProbe.authenticated !== false
+  const ready = canCompleteInitialSetup({ consentAccepted: accepted, cliUsable: usable, sttStatus, voiceId: selectedVoice, voiceSamplePlayed })
+  const sttError = interviewReadinessError(sttStatus, HIGH_QUALITY_STT_MODEL)
+  const playVoiceSample = async () => {
+    setError(''); setVoiceSamplePlayed(false); samplePlayer.current?.stop()
+    try {
+      const url = await api.renderSpeech('안녕하세요. 지금부터 실제 면접처럼 질문을 드리겠습니다.', selectedVoice, voiceRate)
+      await samplePlayer.current?.play(url)
+      setVoiceSamplePlayed(true)
+    } catch (reason) { setError(`음성 샘플 재생 실패: ${reason instanceof Error ? reason.message : String(reason)}`) }
+  }
+  const downloadRecommendedModel = async () => {
+    setBusyModel(true); setError('')
+    try { await api.downloadSttModel(HIGH_QUALITY_STT_MODEL); setSttStatus(await api.getSttStatus()) }
+    catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)) }
+    finally { setBusyModel(false) }
+  }
   const submit = async () => {
-    if (!accepted || !usable) return
+    if (!ready) return
     setBusy(true); setError('')
     try {
       await api.testCli(selected)
-      await api.saveSettings({ consentAccepted: true, cliVerified: true, defaultProvider: selected })
+      await api.saveSettings({
+        consentAccepted: true,
+        cliVerified: true,
+        mediaSetupCompleted: true,
+        defaultProvider: selected,
+        sttModel: HIGH_QUALITY_STT_MODEL,
+        ttsVoice: selectedVoice,
+        ttsRate: voiceRate
+      })
       await onComplete()
     } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); setBusy(false) }
   }
@@ -60,13 +103,21 @@ function Onboarding({ settings, onComplete }: { settings: AppSettings; onComplet
     <div className="onboarding-copy"><div className="onboarding-logo"><img src={interviewStudioLogo} alt="Interview Studio 로고" /><strong>Interview Studio</strong></div><div className="eyebrow">WELCOME TO</div><h1>면접의 긴장까지<br /><em>연습</em>하세요.</h1><p>내 포트폴리오를 이해하는 AI 면접관과 목소리로 대화하고, 답변과 영상을 한 번에 복기합니다.</p>
       <div className="feature-row"><span><Mic /> 음성 면접</span><span><Bot /> 동적 꼬리질문</span><span><MonitorPlay /> 로컬 녹화</span></div>
     </div>
-    <div className="consent-card"><h2>AI 면접관 연결</h2><p>컨텍스트 수집 전에 기기에 설치된 AI CLI를 실제 호출해 연결을 확인합니다.</p>
+    <div className="consent-card setup-card"><h2>고품질 면접 환경 준비</h2><p>처음 한 번 AI·음성 인식·면접관 음성을 모두 확인합니다. 준비되지 않은 항목이 있으면 면접을 시작할 수 없습니다.</p>
+      <div className="setup-section"><strong><span>1</span> AI 면접관 연결</strong>
       <ul><li>프로필 요약과 답변 전사는 선택한 CLI를 통해 해당 LLM 공급자에게 전달됩니다.</li><li>원본 파일 바이트·음성·카메라 영상은 보내지 않으며, 문서에서 추출한 텍스트는 컨텍스트 생성을 위해 전달됩니다.</li><li>모든 앱 데이터는 이 기기에 평문으로 저장됩니다.</li></ul>
       <label className="check"><input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} /><span><Check /></span> 위 내용을 이해하고 동의합니다.</label>
       <div className="probe-list onboarding-probes">{(['codex', 'claude', 'gemini'] as Provider[]).map((provider) => { const item = probes.find((probeResult) => probeResult.provider === provider); const ready = !!item?.installed && !item.error && item.authenticated !== false; const detail = !item ? '확인 중…' : !item.installed ? '설치되지 않음' : item.error ? item.error : item.authenticated === false ? '로그인 필요' : `${item.version} · 연결 후보`; return <label key={provider} className={selected === provider ? 'active' : ''}><input type="radio" checked={selected === provider} onChange={() => setSelected(provider)} /><Bot /><span><strong>{providerLabel[provider]}</strong><small>{detail}</small></span><i className={ready ? 'ok' : ''}>{ready ? <Check /> : <X />}</i></label> })}</div>
-      <button className="secondary wide" disabled={busy} onClick={probe}><RefreshCw /> CLI 다시 확인</button>
+      <button className="secondary wide" disabled={busy} onClick={probe}><RefreshCw /> CLI 다시 확인</button></div>
+      <div className="setup-section"><strong><span>2</span> 고품질 한국어 음성 인식</strong><p>정확도와 처리 속도의 균형이 좋은 Whisper `small` 모델을 권장값으로 사용합니다.</p>
+        <div className={`setup-status ${!sttError ? 'ready' : ''}`}><Mic /><span><b>whisper-cli</b><small>{sttStatus?.binary ?? '실행 파일을 찾지 못했습니다'}</small></span>{sttStatus?.binary ? <Check /> : <X />}</div>
+        <div className={`setup-status ${sttStatus?.models.small ? 'ready' : ''}`}><Sparkles /><span><b>small 모델</b><small>{sttStatus?.models.small ? '설치됨 · 면접 전사 준비 완료' : '최초 1회 다운로드가 필요합니다'}</small></span>{sttStatus?.models.small ? <Check /> : <button disabled={busyModel || !sttStatus?.binary} onClick={downloadRecommendedModel}>{busyModel ? <LoaderCircle className="spin" /> : <Download />}{busyModel ? '다운로드 중…' : '다운로드'}</button>}</div>
+      </div>
+      <div className="setup-section"><strong><span>3</span> 한국어 면접관 음성</strong><p>설치된 한국어 음성 중 품질이 높은 후보를 우선 선택합니다. 반드시 샘플을 들어보고 완료하세요.</p>
+        {voices.length ? <><label>면접관 음성<select value={selectedVoice} onChange={(event) => { setSelectedVoice(event.target.value); setVoiceSamplePlayed(false) }}>{voices.map((voice) => <option key={voice.id} value={voice.id}>{voice.name} · {voiceQualityLabel(voice)}</option>)}</select></label><label>말하기 속도<input type="range" min="0.8" max="1.2" step="0.1" value={voiceRate} onChange={(event) => { setVoiceRate(Number(event.target.value)); setVoiceSamplePlayed(false) }} /><span>{voiceRate}×</span></label><button className={`secondary wide ${voiceSamplePlayed ? 'verified' : ''}`} disabled={!selectedVoice} onClick={playVoiceSample}><Volume2 /> {voiceSamplePlayed ? '샘플 확인 완료' : '음성 샘플 듣기'}</button></> : <div className="setup-status"><Volume2 /><span><b>한국어 음성이 없습니다</b><small>Windows 또는 macOS 설정에서 한국어 음성을 설치한 뒤 다시 확인하세요.</small></span><button onClick={() => void refreshMedia()}><RefreshCw /> 다시 확인</button></div>}
+      </div>
       {error && <p className="error"><AlertTriangle />{error}</p>}
-      <button className="primary wide onboarding-start" disabled={!accepted || !usable || busy} onClick={submit}>{busy ? <><LoaderCircle className="spin" /> 실제 연결 테스트 중…</> : <>연결 테스트 및 시작 <ChevronRight /></>}</button>
+      <button className="primary wide onboarding-start" disabled={!ready || busy || busyModel} onClick={submit}>{busy ? <><LoaderCircle className="spin" /> 최종 연결 확인 중…</> : <>모든 설정을 저장하고 시작 <ChevronRight /></>}</button>
     </div>
   </div>
 }
@@ -212,12 +263,16 @@ function NewSession({ data, refresh }: { data: DashboardData; refresh: () => Pro
 function InterviewRoom(): JSX.Element {
   const { id = '' } = useParams(), navigate = useNavigate()
   const [session, setSession] = useState<InterviewSession | null>(null), [deviceReady, setDeviceReady] = useState(false), [started, setStarted] = useState(false)
+  const [sttStatus, setSttStatus] = useState<SttStatus | null>(null), [sttModel, setSttModel] = useState<AppSettings['sttModel']>('small')
+  const [busyModel, setBusyModel] = useState(false), [voiceReady, setVoiceReady] = useState(false)
   const [phase, setPhase] = useState<'idle' | 'asking' | 'listening' | 'analyzing' | 'paused'>('idle')
   const [baseIndex, setBaseIndex] = useState(0), [depth, setDepth] = useState(0), [followUp, setFollowUp] = useState<string | null>(null)
   const [remaining, setRemaining] = useState(ANSWER_LIMIT_SECONDS), [revealed, setRevealed] = useState(false), [replayed, setReplayed] = useState(false)
   const [error, setError] = useState(''), [practiceReview, setPracticeReview] = useState<{ turn: InterviewTurn; decision: FollowUpDecision } | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null), streamRef = useRef<MediaStream | null>(null), recorderRef = useRef<MediaRecorder | null>(null)
   const answerRecorderRef = useRef<MediaRecorder | null>(null), answerChunksRef = useRef<Blob[]>([]), recordingSequence = useRef(0), answerStarted = useRef(Date.now()), audioUrlRef = useRef('')
+  const deviceSamplePlayer = useRef<ExclusiveAudioPlayer | null>(null)
+  if (!deviceSamplePlayer.current) deviceSamplePlayer.current = new ExclusiveAudioPlayer((url) => new Audio(url))
   const pendingRecordingChunks = useRef(new Set<Promise<void>>()), retriedAnswers = useRef(new Set<string>())
 
   useEffect(() => {
@@ -239,13 +294,19 @@ function InterviewRoom(): JSX.Element {
       setSession(item)
     })
   }, [id, navigate])
+  useEffect(() => {
+    void Promise.all([api.bootstrap(), api.getSttStatus()]).then(([dashboard, status]) => {
+      setSttModel(dashboard.settings.sttModel)
+      setSttStatus(status)
+    }).catch((reason) => setError(reason instanceof Error ? reason.message : String(reason)))
+  }, [])
   useEffect(() => { if (started && videoRef.current && streamRef.current) { videoRef.current.srcObject = streamRef.current; void videoRef.current.play() } }, [started])
   useEffect(() => {
     if (phase !== 'listening') return
     const timer = window.setInterval(() => setRemaining((value) => { if (value <= 1) { window.clearInterval(timer); void submitAnswer(true); return 0 } return value - 1 }), 1000)
     return () => window.clearInterval(timer)
   }, [phase])
-  useEffect(() => () => { streamRef.current?.getTracks().forEach((track) => track.stop()) }, [])
+  useEffect(() => () => { streamRef.current?.getTracks().forEach((track) => track.stop()); deviceSamplePlayer.current?.stop() }, [])
 
   const currentBase = session?.questionPlan?.questions[baseIndex]
   const currentQuestion: InterviewQuestion | null = currentBase ? { ...currentBase, question: followUp ?? currentBase.question } : null
@@ -261,6 +322,22 @@ function InterviewRoom(): JSX.Element {
       if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play() }
       setDeviceReady(true)
     } catch (reason) { setError(`마이크를 사용할 수 없습니다: ${reason instanceof Error ? reason.message : String(reason)}`) }
+  }
+
+  const downloadSelectedModel = async () => {
+    setBusyModel(true); setError('')
+    try { await api.downloadSttModel(sttModel); setSttStatus(await api.getSttStatus()) }
+    catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)) }
+    finally { setBusyModel(false) }
+  }
+
+  const testInterviewVoice = async () => {
+    setError(''); setVoiceReady(false); deviceSamplePlayer.current?.stop()
+    try {
+      const url = await api.renderSpeech('장치 점검입니다. 이 음성이 잘 들리면 면접을 시작할 수 있습니다.')
+      await deviceSamplePlayer.current?.play(url)
+      setVoiceReady(true)
+    } catch (reason) { setError(`면접관 음성을 재생할 수 없습니다: ${reason instanceof Error ? reason.message : String(reason)}`) }
   }
 
   const startContinuousRecording = () => {
@@ -301,7 +378,19 @@ function InterviewRoom(): JSX.Element {
     } catch (reason) { setPhase('paused'); setError(`질문 음성 재생에 실패했습니다. 설정을 확인한 뒤 다시 시도하세요. (${reason instanceof Error ? reason.message : String(reason)})`) }
   }
 
-  const begin = async () => { await api.startSession(id); setStarted(true); startContinuousRecording(); await speak(currentQuestion!.question, false) }
+  const begin = async () => {
+    setError('')
+    try {
+      const latestStatus = await api.getSttStatus()
+      setSttStatus(latestStatus)
+      const readinessError = interviewReadinessError(latestStatus, sttModel)
+      if (readinessError) throw new Error(readinessError)
+      if (!deviceReady) throw new Error('마이크 점검을 먼저 완료하세요.')
+      if (!voiceReady) throw new Error('면접관 음성 샘플을 먼저 확인하세요.')
+      await api.startSession(id)
+      setStarted(true); startContinuousRecording(); await speak(currentQuestion!.question, false)
+    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)) }
+  }
 
   const stopAnswerBlob = (): Promise<Blob> => new Promise((resolve) => {
     const recorder = answerRecorderRef.current
@@ -346,7 +435,17 @@ function InterviewRoom(): JSX.Element {
   }
 
   if (!session || !currentQuestion) return <LoadingScreen />
-  if (!started) return <div className="interview-screen device-screen"><Link to="/new" className="back"><ArrowLeft /> 돌아가기</Link><div className="device-card"><div className="eyebrow">DEVICE CHECK</div><h1>면접 환경을 확인하세요</h1><p>마이크는 필수이며 카메라는 사용할 수 없으면 음성만으로 진행됩니다. 헤드폰을 권장합니다.</p><div className="camera-preview"><video ref={videoRef} muted playsInline /><Camera /></div>{error && <p className="error"><AlertTriangle />{error}</p>}{!deviceReady ? <button className="primary wide" onClick={setupDevices}><Mic /> 마이크·카메라 확인</button> : <button className="primary wide" onClick={begin}>면접 시작</button>}</div></div>
+  if (!started) {
+    const sttReadinessError = interviewReadinessError(sttStatus, sttModel)
+    const allReady = deviceReady && !sttReadinessError && voiceReady
+    return <div className="interview-screen device-screen"><Link to="/new" className="back"><ArrowLeft /> 돌아가기</Link><div className="device-card"><div className="eyebrow">DEVICE CHECK</div><h1>면접 환경을 확인하세요</h1><p>첫 답변 전에 마이크·음성 인식·면접관 음성을 모두 실제로 점검합니다. 카메라는 선택 사항입니다.</p><div className="camera-preview"><video ref={videoRef} muted playsInline /><Camera /></div>
+      <div className="device-readiness">
+        <div className={deviceReady ? 'ready' : ''}><Mic /><span><b>마이크·카메라</b><small>{deviceReady ? `마이크 준비 완료${streamRef.current?.getVideoTracks().length ? ' · 카메라 연결됨' : ' · 카메라 없이 진행'}` : '권한과 입력 장치를 확인합니다.'}</small></span>{deviceReady ? <Check /> : <button onClick={setupDevices}>장치 확인</button>}</div>
+        <div className={!sttReadinessError ? 'ready' : ''}><Sparkles /><span><b>{sttModel} 음성 인식 모델</b><small>{!sttReadinessError ? '로컬 전사 준비 완료' : sttReadinessError}</small></span>{!sttReadinessError ? <Check /> : sttStatus?.binary ? <button disabled={busyModel} onClick={downloadSelectedModel}>{busyModel ? <LoaderCircle className="spin" /> : <Download />}{busyModel ? '다운로드 중…' : '다운로드'}</button> : <X />}</div>
+        <div className={voiceReady ? 'ready' : ''}><Volume2 /><span><b>면접관 음성</b><small>{voiceReady ? '출력 장치와 음성 재생 확인 완료' : '실제 질문과 같은 방식으로 재생합니다.'}</small></span>{voiceReady ? <Check /> : <button onClick={testInterviewVoice}>샘플 듣기</button>}</div>
+      </div>
+      {error && <p className="error"><AlertTriangle />{error}</p>}<button className="primary wide" disabled={!allReady || busyModel} onClick={begin}>{allReady ? '면접 시작' : '필수 점검을 완료하세요'}</button></div></div>
+  }
 
   return <div className="interview-screen"><div className="interview-top"><div><span className="live-dot" /> {session.config.mode === 'practice' ? '연습 면접' : '실전 면접'}</div><div>주제 {baseIndex + 1} / {session.questionPlan?.questions.length}<span className="divider" />꼬리 {depth} / 4</div><button onClick={() => void stopSession('사용자 중도 종료')}><Square /> 종료</button></div>
     <div className="interview-stage"><div className={`ai-avatar ${phase}`}><div className="halo" /><div className="face"><i className="eye left" /><i className="eye right" /><i className="mouth" /></div><div className="sound-waves"><i /><i /><i /><i /><i /></div></div><h2>{phase === 'asking' ? '질문하고 있습니다' : phase === 'listening' ? '답변을 듣고 있습니다' : phase === 'analyzing' ? '답변을 분석하고 있습니다' : '면접이 잠시 멈췄습니다'}</h2>
@@ -389,7 +488,7 @@ function TranscriptEdit({ turn, close, save }: { turn: InterviewTurn; close: () 
 }
 
 function SettingsPage({ data, refresh }: { data: DashboardData; refresh: () => Promise<void> }): JSX.Element {
-  const [probes, setProbes] = useState<CliProbeResult[]>([]), [voices, setVoices] = useState<Array<{ id: string; name: string; language: string }>>([]), [stt, setStt] = useState<{ binary: string | null; models: Record<string, boolean> } | null>(null), [busyModel, setBusyModel] = useState('')
+  const [probes, setProbes] = useState<CliProbeResult[]>([]), [voices, setVoices] = useState<TtsVoice[]>([]), [stt, setStt] = useState<SttStatus | null>(null), [busyModel, setBusyModel] = useState('')
   const [sampleError, setSampleError] = useState('')
   const sampleController = useRef<AudioSampleController | null>(null)
   if (!sampleController.current) {
@@ -403,10 +502,11 @@ function SettingsPage({ data, refresh }: { data: DashboardData; refresh: () => P
     return () => sampleController.current?.stop()
   }, [])
   const save = async (patch: Partial<AppSettings>) => { await api.saveSettings(patch); await refresh() }
+  const availableKoreanVoices = koreanVoices(voices)
   return <div className="page"><header className="compact-header"><div><div className="eyebrow">SYSTEM</div><h1>설정과 진단</h1><p>AI CLI, 음성, 로컬 모델과 데이터 상태를 관리합니다.</p></div></header>
     <div className="settings-grid"><section><h2>AI CLI</h2><p>인증과 모델 외 사용자 규칙·플러그인은 적용하지 않습니다.</p><div className="probe-list">{(['codex', 'claude', 'gemini'] as Provider[]).map((provider) => { const item = probes.find((probe) => probe.provider === provider); const usable = !!item?.installed && !item.error && item.authenticated !== false; const detail = !item ? '확인 중…' : !item.installed ? '설치되지 않음' : item.error ? item.error : item.authenticated === false ? '인증 필요' : `${item.version} · 사용 가능`; return <label key={provider} className={data.settings.defaultProvider === provider ? 'active' : ''}><input type="radio" name="provider" checked={data.settings.defaultProvider === provider} onChange={() => void save({ defaultProvider: provider })} /><Bot /><span><strong>{providerLabel[provider]}</strong><small>{detail}</small></span><i className={usable ? 'ok' : ''}>{usable ? <Check /> : <X />}</i></label> })}</div><button className="secondary" onClick={async () => setProbes(await api.probeClis())}><RefreshCw /> 다시 확인</button></section>
-      <section><h2>면접관 음성</h2><label>한국어 음성<select value={data.settings.ttsVoice} onChange={(event) => void save({ ttsVoice: event.target.value })}><option value="">운영체제 기본값</option>{voices.map((voice) => <option key={voice.id} value={voice.id}>{voice.name} · {voice.language}</option>)}</select></label><label>말하기 속도<input type="range" min="0.7" max="1.4" step="0.1" value={data.settings.ttsRate} onChange={(event) => void save({ ttsRate: Number(event.target.value) })} /><span>{data.settings.ttsRate}×</span></label><button className="secondary" onClick={async () => { setSampleError(''); try { await sampleController.current?.replay() } catch (reason) { setSampleError(reason instanceof Error ? reason.message : String(reason)) } }}><Volume2 /> 음성 샘플</button>{sampleError && <p className="error"><AlertTriangle />음성 샘플 재생 실패: {sampleError}</p>}</section>
-      <section><h2>로컬 음성 인식</h2><p>실행 파일: {stt?.binary ?? 'whisper-cli를 찾지 못했습니다'}</p><div className="model-list">{(['base', 'small', 'medium'] as const).map((model) => <div key={model}><span><strong>{model}</strong><small>{model === 'base' ? '빠름' : model === 'small' ? '권장 균형' : '고정확도'}</small></span>{stt?.models[model] ? <b><Check /> 설치됨</b> : <button disabled={!!busyModel} onClick={async () => { setBusyModel(model); await api.downloadSttModel(model); setStt(await api.getSttStatus()); setBusyModel('') }}>{busyModel === model ? <LoaderCircle className="spin" /> : <Download />} 다운로드</button>}</div>)}</div><label>기본 모델<select value={data.settings.sttModel} onChange={(event) => void save({ sttModel: event.target.value as AppSettings['sttModel'] })}><option>base</option><option>small</option><option>medium</option></select></label></section>
+      <section><h2>면접관 음성</h2><p>최초 설정에서 확인한 한국어 음성입니다. 음성을 바꾼 뒤에는 샘플을 다시 확인하세요.</p><label>한국어 음성<select value={data.settings.ttsVoice} onChange={(event) => void save({ ttsVoice: event.target.value })}>{availableKoreanVoices.map((voice) => <option key={voice.id} value={voice.id}>{voice.name} · {voiceQualityLabel(voice)}</option>)}</select></label><label>말하기 속도<input type="range" min="0.7" max="1.4" step="0.1" value={data.settings.ttsRate} onChange={(event) => void save({ ttsRate: Number(event.target.value) })} /><span>{data.settings.ttsRate}×</span></label><button className="secondary" onClick={async () => { setSampleError(''); try { await sampleController.current?.replay() } catch (reason) { setSampleError(reason instanceof Error ? reason.message : String(reason)) } }}><Volume2 /> 음성 샘플</button>{sampleError && <p className="error"><AlertTriangle />음성 샘플 재생 실패: {sampleError}</p>}</section>
+      <section><h2>로컬 음성 인식</h2><p>실행 파일: {stt?.binary ?? 'whisper-cli를 찾지 못했습니다'}</p><div className="model-list">{(['base', 'small', 'medium'] as const).map((model) => <div key={model}><span><strong>{model}</strong><small>{model === 'base' ? '빠름' : model === 'small' ? '권장 고품질' : '최고 정확도 · 느림'}</small></span>{stt?.models[model] ? <b><Check /> 설치됨</b> : <button disabled={!!busyModel} onClick={async () => { setBusyModel(model); setSampleError(''); try { await api.downloadSttModel(model); setStt(await api.getSttStatus()) } catch (reason) { setSampleError(reason instanceof Error ? reason.message : String(reason)) } finally { setBusyModel('') } }}>{busyModel === model ? <LoaderCircle className="spin" /> : <Download />} 다운로드</button>}</div>)}</div><label>기본 모델<select value={data.settings.sttModel} onChange={(event) => void save({ sttModel: event.target.value as AppSettings['sttModel'] })}><option>base</option><option>small</option><option>medium</option></select></label></section>
       <section className="danger-zone"><h2>로컬 데이터</h2><p>프로필, 원본 복사본, 세션, 영상, 모델과 집계 통계를 모두 삭제합니다. 복구할 수 없습니다.</p><button className="danger-button" onClick={async () => { if (confirm('Interview Studio의 모든 로컬 데이터를 영구 삭제할까요?')) { await api.deleteAllData(); await refresh() } }}><Trash2 /> 모든 데이터 삭제</button></section></div>
   </div>
 }
@@ -416,7 +516,7 @@ export function App(): JSX.Element {
   const refresh = useCallback(async () => setData(await api.bootstrap()), [])
   useEffect(() => { void refresh() }, [refresh])
   if (!data) return <LoadingScreen />
-  if (!data.settings.consentAccepted || !data.settings.cliVerified) return <Onboarding settings={data.settings} onComplete={refresh} />
+  if (!data.settings.consentAccepted || !data.settings.cliVerified || !data.settings.mediaSetupCompleted) return <Onboarding settings={data.settings} onComplete={refresh} />
   return <Routes><Route element={<Shell><RoutesOutlet /></Shell>}>
     <Route index element={<Dashboard data={data} />} />
     <Route path="profiles" element={<Profiles data={data} refresh={refresh} />} />

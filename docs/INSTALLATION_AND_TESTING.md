@@ -1,6 +1,6 @@
 # Interview Studio 설치 및 테스트 가이드
 
-이 문서는 개인용 alpha 버전 `0.2.3`을 다른 PC에서 내려받아 실행하고, 카메라·마이크·AI CLI를 연결해 첫 면접을 테스트하는 절차를 설명합니다.
+이 문서는 개인용 alpha 버전 `0.2.4`를 다른 PC에서 내려받아 실행하고, 카메라·마이크·AI CLI를 연결해 첫 면접을 테스트하는 절차를 설명합니다.
 
 ## 1. 지원 범위
 
@@ -20,7 +20,7 @@
 
 1. 저장소가 private이므로 Windows PC의 브라우저에서 GitHub 계정 `mynameisjinhohong`로 로그인합니다.
 2. [Interview Studio Releases](https://github.com/mynameisjinhohong/interview-studio/releases)에서 최신 prerelease를 엽니다.
-3. `Interview.Studio-0.2.3-x64.exe`를 내려받습니다.
+3. `Interview.Studio-0.2.4-x64.exe`를 내려받습니다.
 4. SmartScreen이 표시되면 게시자가 `알 수 없음`인 개인용 alpha임을 확인하고, 신뢰할 수 있는 저장소에서 직접 받은 파일일 때만 `추가 정보` → `실행`을 선택합니다.
 5. 설치 위치를 선택해 설치한 뒤 Interview Studio를 실행합니다.
 
@@ -86,10 +86,12 @@ gemini --version
 ### 2.3 앱에서 CLI 확인
 
 1. CLI 로그인까지 마친 뒤 Interview Studio를 완전히 종료하고 다시 실행합니다.
-2. 최초 화면에서 사용할 CLI를 선택하고 `연결 테스트 및 시작`을 누릅니다. 단순 설치 확인이 아니라 실제 구조화 LLM 호출이 성공해야 다음 단계로 이동합니다.
-3. 이후에는 `설정` → `CLI 연결`에서 `다시 검사`를 눌러 상태를 확인할 수 있습니다.
-4. 사용할 CLI에 설치 경로, 버전, 인증 상태가 표시되는지 확인합니다.
-5. `설치되지 않음`이면 새 PowerShell에서 다음 명령으로 실제 경로를 확인합니다.
+2. 최초 화면에서 사용할 CLI를 선택합니다. 단순 설치 확인이 아니라 마지막 단계에서 실제 구조화 LLM 호출까지 검사합니다.
+3. `small` STT 모델을 내려받고 `설치됨` 표시를 확인합니다.
+4. 자동 추천된 한국어 면접관 음성을 선택하고 샘플을 끝까지 재생합니다.
+5. `모든 설정을 저장하고 시작`을 누릅니다. CLI, STT, 한국어 음성과 샘플 확인이 모두 끝나야 활성화됩니다.
+6. 이후에는 `설정`에서 CLI·음성·STT 모델을 변경할 수 있습니다.
+7. CLI가 `설치되지 않음`이면 새 PowerShell에서 다음 명령으로 실제 경로를 확인합니다.
 
 ```powershell
 Get-Command codex -ErrorAction SilentlyContinue
@@ -100,7 +102,7 @@ npm config get prefix
 
 CLI를 설치한 PowerShell에서는 되는데 앱에서만 찾지 못하면 Windows 재로그인 후 다시 검사합니다. 앱은 `%APPDATA%\npm`, `%LOCALAPPDATA%\Programs\nodejs`, `%ProgramFiles%\nodejs`와 시스템 `PATH`를 탐색합니다.
 
-0.1.0에서 업데이트한 경우 기존 프로필과 면접 기록은 유지됩니다. 새 버전에서는 처음 한 번 CLI 실제 연결 테스트가 다시 나타납니다.
+기존 버전에서 업데이트한 경우 프로필과 면접 기록은 유지됩니다. 0.2.4에서는 고품질 음성 환경을 확인하기 위해 확장된 최초 설정이 한 번 다시 나타납니다.
 
 ### 2.4 프로필 자료 수집 방식
 
@@ -127,20 +129,20 @@ Windows `설정` → `개인 정보 및 보안`에서 다음을 켭니다.
 
 ### 3.2 STT 모델
 
-1. Interview Studio의 `설정` → `로컬 음성 인식`을 엽니다.
-2. 실행 파일에 `whisper-cli.exe` 경로가 표시되는지 확인합니다.
-3. `small` 모델을 내려받고 기본 모델로 선택합니다.
-4. 저장 공간이 부족하거나 첫 확인만 빠르게 하려면 `base`를 사용합니다. `medium`은 더 크고 느립니다.
+1. 최초 설정 화면에서 실행 파일에 `whisper-cli.exe` 경로가 표시되는지 확인합니다.
+2. 권장 고품질 모델인 `small`을 내려받습니다.
+3. 다운로드가 끝나고 `설치됨`으로 바뀐 뒤에만 최초 설정을 완료할 수 있습니다.
+4. 이후 설정에서 `base` 또는 `medium`으로 바꿀 수 있지만, 선택 모델이 설치되지 않으면 면접 시작 전 장치 점검이 다운로드를 요구합니다.
 
 모델 다운로드에는 인터넷 연결과 충분한 디스크 공간이 필요합니다. 내려받는 도중 앱을 종료했다면 다시 다운로드하십시오.
 
 ### 3.3 카메라·마이크 점검
 
 1. 새 면접을 만들고 `장치 점검`까지 이동합니다.
-2. 마이크 입력 레벨이 말할 때 움직이는지 확인합니다.
-3. 원하는 카메라 미리보기가 나타나는지 확인합니다.
-4. 한국어 TTS 샘플을 재생해 출력 장치와 음량을 확인합니다.
-5. 질문 음성이 끝난 뒤 녹음이 자동 시작되는지 확인합니다.
+2. `장치 확인`으로 마이크 권한과 카메라 미리보기를 확인합니다.
+3. 선택된 STT 모델이 설치되지 않았다면 이 화면에서 다운로드합니다.
+4. `샘플 듣기`로 실제 질문과 같은 음성 출력 경로를 확인합니다.
+5. 세 항목이 모두 준비된 뒤에만 `면접 시작` 버튼이 활성화됩니다.
 
 ## 4. 첫 통합 테스트 시나리오
 
@@ -178,7 +180,7 @@ pnpm build
 pnpm package:win
 ```
 
-생성물은 `release\0.2.3\`에 저장됩니다. 소스로 실행한 경우에는 Release 설치본과 달리 `whisper-cli.exe`가 자동으로 포함되지 않습니다. `whisper.cpp`를 빌드한 뒤 실행 파일과 DLL을 아래 둘 중 한 위치에 함께 두십시오.
+생성물은 `release\0.2.4\`에 저장됩니다. 소스로 실행한 경우에는 Release 설치본과 달리 `whisper-cli.exe`가 자동으로 포함되지 않습니다. `whisper.cpp`를 빌드한 뒤 실행 파일과 DLL을 아래 둘 중 한 위치에 함께 두십시오.
 
 - `%APPDATA%\Interview Studio\runtime\bin`
 - `%LOCALAPPDATA%\whisper.cpp`
@@ -187,7 +189,7 @@ pnpm package:win
 
 ## 6. macOS 설치와 설정
 
-1. [Releases](https://github.com/mynameisjinhohong/interview-studio/releases)에서 Apple Silicon용 `Interview.Studio-0.2.3-arm64.dmg`를 내려받습니다.
+1. [Releases](https://github.com/mynameisjinhohong/interview-studio/releases)에서 Apple Silicon용 `Interview.Studio-0.2.4-arm64.dmg`를 내려받습니다.
 2. 앱을 Applications 폴더로 옮깁니다.
 3. 서명되지 않은 alpha 경고가 뜨면 `시스템 설정` → `개인정보 보호 및 보안`에서 차단된 Interview Studio의 `확인 없이 열기`를 선택합니다.
 4. 터미널에서 사용할 CLI를 설치하고 로그인한 뒤 앱을 다시 시작합니다.

@@ -12,6 +12,18 @@ export type Provider = z.infer<typeof providerSchema>
 export type SessionType = z.infer<typeof sessionTypeSchema>
 export type SessionMode = z.infer<typeof sessionModeSchema>
 export type SessionStatus = z.infer<typeof sessionStatusSchema>
+export type SttModel = 'base' | 'small' | 'medium'
+
+export interface SttStatus {
+  binary: string | null
+  models: Record<SttModel, boolean>
+}
+
+export interface TtsVoice {
+  id: string
+  name: string
+  language: string
+}
 
 export const sourceSchema = z.object({
   id: z.string(),
@@ -185,6 +197,7 @@ export type InterviewSession = z.infer<typeof sessionSchema>
 export const settingsSchema = z.object({
   consentAccepted: z.boolean().default(false),
   cliVerified: z.boolean().default(false),
+  mediaSetupCompleted: z.boolean().default(false),
   defaultProvider: providerSchema.default('codex'),
   modelOverrides: z.record(providerSchema, z.string()).default({ codex: '', claude: '', gemini: '' }),
   ttsVoice: z.string().default(''),
@@ -266,11 +279,11 @@ export interface InterviewStudioApi {
   updateTranscript(turnId: string, transcript: string): Promise<InterviewSession>
   appendRecordingChunk(input: RecordingChunkInput): Promise<void>
   finalizeRecording(sessionId: string): Promise<string | null>
-  listVoices(): Promise<Array<{ id: string; name: string; language: string }>>
-  renderSpeech(text: string, voice?: string): Promise<string>
+  listVoices(): Promise<TtsVoice[]>
+  renderSpeech(text: string, voice?: string, rate?: number): Promise<string>
   getMediaUrl(path: string): Promise<string>
-  getSttStatus(): Promise<{ binary: string | null; models: Record<string, boolean> }>
-  downloadSttModel(model: 'base' | 'small' | 'medium'): Promise<{ path: string; sha256: string }>
+  getSttStatus(): Promise<SttStatus>
+  downloadSttModel(model: SttModel): Promise<{ path: string; sha256: string }>
   exportPdf(sessionId: string): Promise<string | null>
   exportVideo(sessionId: string): Promise<string | null>
   deleteAllData(): Promise<void>

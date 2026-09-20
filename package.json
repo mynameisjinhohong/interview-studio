@@ -1,6 +1,6 @@
 {
   "name": "interview-studio",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "private": true,
   "description": "Local Korean technical interview practice studio powered by installed AI CLIs.",
   "main": "./out/main/index.js",
@@ -21,6 +21,7 @@
     "postinstall": "electron-builder install-app-deps"
   },
   "dependencies": {
+    "@echogarden/windows-media-tts": "0.1.2",
     "@napi-rs/canvas": "^0.1.80",
     "better-sqlite3": "^13.0.3",
     "drizzle-orm": "^0.45.2",

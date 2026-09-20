@@ -11,6 +11,7 @@ asarUnpack:
   - node_modules/ffmpeg-static/**/*
   - node_modules/@napi-rs/canvas/**/*
   - node_modules/@napi-rs/canvas-*/**/*
+  - node_modules/@echogarden/windows-media-tts/addons/bin/*.node
 extraResources:
   - from: build/sidecar
     to: sidecar

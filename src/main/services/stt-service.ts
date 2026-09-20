@@ -4,6 +4,7 @@ import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
 import { homedir } from 'node:os'
+import type { SttModel, SttStatus } from '../../shared/contracts.js'
 import { DiagnosticLogger } from './logger.js'
 import { runProcess } from './process-runner.js'
 
@@ -33,8 +34,11 @@ const findWhisper = (root: string): string | null => {
 export class SttService {
   constructor(private root: string, private logger: DiagnosticLogger) {}
   private modelPath(model: keyof typeof MODEL_URLS): string { return join(this.root, 'models', `ggml-${model}.bin`) }
-  status(): { binary: string | null; models: Record<string, boolean> } {
-    return { binary: findWhisper(this.root), models: Object.fromEntries(Object.keys(MODEL_URLS).map((key) => [key, existsSync(this.modelPath(key as keyof typeof MODEL_URLS))])) }
+  status(): SttStatus {
+    return {
+      binary: findWhisper(this.root),
+      models: Object.fromEntries(Object.keys(MODEL_URLS).map((key) => [key, existsSync(this.modelPath(key as SttModel))])) as Record<SttModel, boolean>
+    }
   }
 
   async download(model: keyof typeof MODEL_URLS): Promise<{ path: string; sha256: string }> {
@@ -62,7 +66,7 @@ export class SttService {
     return { path, sha256: digest }
   }
 
-  async transcribe(audioPath: string, model: 'base' | 'small' | 'medium'): Promise<string> {
+  async transcribe(audioPath: string, model: SttModel): Promise<string> {
     const whisper = findWhisper(this.root)
     const modelPath = this.modelPath(model)
     if (!whisper) throw new Error('whisper-cli 실행 파일을 찾을 수 없습니다. README의 설치 안내를 확인하세요.')

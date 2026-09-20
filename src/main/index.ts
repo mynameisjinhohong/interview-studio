@@ -17,6 +17,7 @@ import { InterviewService } from './services/interview-service.js'
 import { exportSessionPdf } from './export-service.js'
 import { providerSchema, sessionConfigSchema, settingsSchema, type CompleteTurnInput, type RecordingChunkInput } from '../shared/contracts.js'
 import { IPC } from '../shared/ipc.js'
+import { interviewReadinessError } from '../shared/setup-readiness.js'
 import { mediaProtocolPrivileges } from './media-protocol-config.js'
 
 protocol.registerSchemesAsPrivileged([{ scheme: 'interview-media', privileges: mediaProtocolPrivileges }])
@@ -105,7 +106,12 @@ app.whenReady().then(() => {
   ipcMain.handle(IPC.cancelSessionPreparation, (_event, requestId: string) => interviews.cancelPreparation(idSchema.parse(requestId)))
   ipcMain.handle(IPC.retentionCandidate, () => db.retentionCandidate())
   ipcMain.handle(IPC.getSession, (_event, id: string) => db.getSession(idSchema.parse(id)))
-  ipcMain.handle(IPC.startSession, (_event, id: string) => interviews.start(idSchema.parse(id)))
+  ipcMain.handle(IPC.startSession, (_event, id: string) => {
+    const settings = db.getSettings()
+    const readinessError = interviewReadinessError(stt.status(), settings.sttModel)
+    if (readinessError) throw new Error(readinessError)
+    return interviews.start(idSchema.parse(id))
+  })
   ipcMain.handle(IPC.completeTurn, async (_event, input: CompleteTurnInput) => {
     const parsedInput = completeTurnInputSchema.parse({ ...input, audioBytes: new Uint8Array(input.audioBytes) })
     try { return await interviews.completeTurn(parsedInput) }
@@ -129,9 +135,10 @@ app.whenReady().then(() => {
     return path
   })
   ipcMain.handle(IPC.listVoices, () => tts.voices())
-  ipcMain.handle(IPC.renderSpeech, async (_event, text: string, voice?: string) => {
+  ipcMain.handle(IPC.renderSpeech, async (_event, text: string, voice?: string, rate?: number) => {
     const settings = db.getSettings()
-    const filePath = await tts.render(text.slice(0, 4_000), voice ?? settings.ttsVoice, settings.ttsRate)
+    const resolvedRate = rate === undefined ? settings.ttsRate : z.number().min(0.5).max(2).parse(rate)
+    const filePath = await tts.render(text.slice(0, 4_000), voice ?? settings.ttsVoice, resolvedRate)
     return `interview-media://local/${Buffer.from(filePath).toString('base64url')}`
   })
   ipcMain.handle(IPC.getMediaUrl, (_event, path: string) => {
