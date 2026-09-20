@@ -12,7 +12,7 @@ afterEach(() => roots.splice(0).forEach((root) => rmSync(root, { recursive: true
 const config: SessionConfig = {
   profileId: 'profile', type: 'technical', mode: 'practice', provider: 'codex', questionCount: 3,
   stacks: ['C#'], experienceLevel: '신입', focusAreas: [], excludedAreas: [], company: '', role: '', stage: '',
-  questionFocus: 'auto', jobPostText: '', jobPostUrl: '', forceResearch: false
+  jobPostText: '', jobPostUrl: '', forceResearch: false
 }
 
 const report: FinalReport = {

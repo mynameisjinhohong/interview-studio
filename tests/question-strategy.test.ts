@@ -1,22 +1,25 @@
 import { describe, expect, it } from 'vitest'
 import { collectRecentQuestionExclusions, resolveQuestionStrategy } from '../src/shared/question-strategy.js'
-import type { InterviewSession, SessionConfig } from '../src/shared/contracts.js'
+import { sessionConfigSchema, type InterviewSession, type SessionConfig } from '../src/shared/contracts.js'
 
-const config = (stage: string, questionFocus: SessionConfig['questionFocus'] = 'auto'): SessionConfig => ({
+const config = (stage: string): SessionConfig => ({
   profileId: 'profile', type: 'company', mode: 'practice', provider: 'codex', questionCount: 5,
   stacks: [], experienceLevel: '신입', focusAreas: [], excludedAreas: [], company: '넥슨', role: '게임 클라이언트',
-  stage, questionFocus, jobPostText: '', jobPostUrl: '', forceResearch: false
+  stage, jobPostText: '', jobPostUrl: '', forceResearch: false
 })
 
 describe('question strategy', () => {
   it('makes first-round company interviews CS-heavy and second-round interviews portfolio-heavy', () => {
-    expect(resolveQuestionStrategy(config('1차 직무 면접'), 'company').weights).toEqual({ cs: 60, portfolio: 25, fit: 15 })
-    expect(resolveQuestionStrategy(config('2차 면접'), 'company').weights).toEqual({ cs: 25, portfolio: 60, fit: 15 })
+    const firstRound = resolveQuestionStrategy(config('1차 직무 면접'), 'company')
+    const secondRound = resolveQuestionStrategy(config('2차 면접'), 'company')
+    expect(firstRound.weights).toEqual({ cs: 60, 'portfolio-cs': 15, portfolio: 15, fit: 10 })
+    expect(firstRound.counts).toEqual({ cs: 3, 'portfolio-cs': 1, portfolio: 1, fit: 0 })
+    expect(secondRound.weights).toEqual({ cs: 20, 'portfolio-cs': 25, portfolio: 45, fit: 10 })
+    expect(secondRound.counts).toEqual({ cs: 1, 'portfolio-cs': 1, portfolio: 2, fit: 1 })
   })
 
-  it('lets an explicit focus override the stage recommendation', () => {
-    expect(resolveQuestionStrategy(config('2차 면접', 'cs'), 'company').weights.cs).toBe(70)
-    expect(resolveQuestionStrategy(config('1차 직무 면접', 'portfolio'), 'company').weights.portfolio).toBe(70)
+  it('does not keep the removed question focus setting', () => {
+    expect(sessionConfigSchema.parse({ ...config('1차 직무 면접'), questionFocus: 'portfolio' })).not.toHaveProperty('questionFocus')
   })
 
   it('excludes recent questions from the same company, role, and profile', () => {

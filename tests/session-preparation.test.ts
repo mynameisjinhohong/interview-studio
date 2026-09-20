@@ -11,7 +11,7 @@ afterEach(() => roots.splice(0).forEach((root) => rmSync(root, { recursive: true
 
 const config: SessionConfig = {
   profileId: 'profile', type: 'technical', mode: 'practice', provider: 'codex', questionCount: 3,
-  stacks: ['C#'], experienceLevel: '신입', focusAreas: [], excludedAreas: [], company: '', role: '', stage: '', questionFocus: 'auto',
+  stacks: ['C#'], experienceLevel: '신입', focusAreas: [], excludedAreas: [], company: '', role: '', stage: '',
   jobPostText: '', jobPostUrl: '', forceResearch: false
 }
 
@@ -32,11 +32,16 @@ describe('session preparation execution policy', () => {
     const db = new AppDatabase(root)
     db.saveProfile(profile)
     const research = { research: vi.fn().mockResolvedValue(researchSnapshot) }
-    const invokeStructured = vi.fn().mockResolvedValue({
-      title: 'C# 면접',
-      questions: [1, 2, 3].map((index) => ({
-        id: `q-${index}`, category: index <= 2 ? 'cs' : 'portfolio', topic: `주제 ${index}`, question: `질문 ${index}`, intent: '검증', sourceUrls: [], suggestedFollowUps: []
-      }))
+    const invokeStructured = vi.fn((_task: string, input: { questionCategory: string; questionCount: number; categoryCounts?: Record<string, number> }, _schema: object, _validator: unknown, _options: unknown) => {
+      const categories = input.questionCategory === 'cs'
+        ? Array.from({ length: input.questionCount }, () => 'cs')
+        : Object.entries(input.categoryCounts ?? {}).flatMap(([category, count]) => Array.from({ length: count }, () => category))
+      return Promise.resolve({
+        title: 'C# 면접',
+        questions: categories.map((category, index) => ({
+          id: `q-${category}-${index}`, category, topic: `주제 ${index}`, question: `질문 ${index}`, intent: '검증', sourceUrls: [], suggestedFollowUps: []
+        }))
+      })
     })
     const cli = { get: vi.fn(() => ({ invokeStructured })) }
     const service = new InterviewService(db, cli as never, research as never, {} as never)
@@ -47,9 +52,12 @@ describe('session preparation execution policy', () => {
     const signal = research.research.mock.calls[0]?.[3]
     expect(signal).toBeInstanceOf(AbortSignal)
     expect(invokeStructured.mock.calls[0]?.[4]).toMatchObject({ timeoutMs: null, idleTimeoutMs: null, signal })
-    expect(invokeStructured.mock.calls[0]?.[1]).toMatchObject({
-      stage: '', questionStrategy: { weights: { cs: 70, portfolio: 30, fit: 0 } }, recentQuestionExclusions: []
-    })
+    expect(invokeStructured).toHaveBeenCalledTimes(2)
+    const pureCsInput = invokeStructured.mock.calls.find((call) => call[1].questionCategory === 'cs')?.[1]
+    const contextualInput = invokeStructured.mock.calls.find((call) => call[1].questionCategory === 'contextual')?.[1]
+    expect(pureCsInput).toMatchObject({ stage: '', questionCount: 2, recentQuestionExclusions: [] })
+    expect(pureCsInput).not.toHaveProperty('profileContext')
+    expect(contextualInput).toMatchObject({ questionCount: 1, categoryCounts: { 'portfolio-cs': 1, portfolio: 0, fit: 0 }, profileContext: '# 프로필' })
     db.close()
   })
 

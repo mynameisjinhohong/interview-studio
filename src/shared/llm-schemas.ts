@@ -39,7 +39,7 @@ export const researchJsonSchema = {
 const question = {
   type: 'object', additionalProperties: false,
   properties: {
-    id: { type: 'string' }, category: { type: 'string', enum: ['cs', 'portfolio', 'fit'] }, topic: { type: 'string' }, question: { type: 'string' }, intent: { type: 'string' },
+    id: { type: 'string' }, category: { type: 'string', enum: ['cs', 'portfolio-cs', 'portfolio', 'fit'] }, topic: { type: 'string' }, question: { type: 'string' }, intent: { type: 'string' },
     sourceUrls: stringArray, suggestedFollowUps: { type: 'array', maxItems: 4, items: { type: 'string' } }
   }, required: ['id', 'category', 'topic', 'question', 'intent', 'sourceUrls', 'suggestedFollowUps']
 } as const

@@ -12,7 +12,7 @@ on:
         description: Release tag
         type: string
         required: true
-        default: v0.2.8
+        default: v0.2.9
 
 permissions:
   contents: write
@@ -106,7 +106,7 @@ jobs:
             gh release create $tag $installer.FullName `
               --repo $env:GITHUB_REPOSITORY `
               --target $env:GITHUB_SHA `
-              --title "Interview Studio 0.2.8 alpha" `
-              --notes-file "docs/RELEASE_NOTES_0.2.8.md" `
+              --title "Interview Studio 0.2.9 alpha" `
+              --notes-file "docs/RELEASE_NOTES_0.2.9.md" `
               --prerelease
           }

@@ -1,6 +1,6 @@
 # Interview Studio 설치 및 테스트 가이드
 
-이 문서는 개인용 alpha 버전 `0.2.8`을 다른 PC에서 내려받아 실행하고, 카메라·마이크·AI CLI를 연결해 첫 면접을 테스트하는 절차를 설명합니다.
+이 문서는 개인용 alpha 버전 `0.2.9`를 다른 PC에서 내려받아 실행하고, 카메라·마이크·AI CLI를 연결해 첫 면접을 테스트하는 절차를 설명합니다.
 
 ## 1. 지원 범위
 
@@ -20,7 +20,7 @@
 
 1. 저장소가 private이므로 Windows PC의 브라우저에서 GitHub 계정 `mynameisjinhohong`로 로그인합니다.
 2. [Interview Studio Releases](https://github.com/mynameisjinhohong/interview-studio/releases)에서 최신 prerelease를 엽니다.
-3. `Interview.Studio-0.2.8-x64.exe`를 내려받습니다.
+3. `Interview.Studio-0.2.9-x64.exe`를 내려받습니다.
 4. SmartScreen이 표시되면 게시자가 `알 수 없음`인 개인용 alpha임을 확인하고, 신뢰할 수 있는 저장소에서 직접 받은 파일일 때만 `추가 정보` → `실행`을 선택합니다.
 5. 설치 위치를 선택해 설치한 뒤 Interview Studio를 실행합니다.
 
@@ -190,7 +190,7 @@ pnpm build
 pnpm package:win
 ```
 
-생성물은 `release\0.2.8\`에 저장됩니다. 소스로 실행한 경우에는 Release 설치본과 달리 `whisper-cli.exe`가 자동으로 포함되지 않습니다. `whisper.cpp`를 빌드한 뒤 실행 파일과 DLL을 아래 둘 중 한 위치에 함께 두십시오.
+생성물은 `release\0.2.9\`에 저장됩니다. 소스로 실행한 경우에는 Release 설치본과 달리 `whisper-cli.exe`가 자동으로 포함되지 않습니다. `whisper.cpp`를 빌드한 뒤 실행 파일과 DLL을 아래 둘 중 한 위치에 함께 두십시오.
 
 - `%APPDATA%\Interview Studio\runtime\bin`
 - `%LOCALAPPDATA%\whisper.cpp`
@@ -199,7 +199,7 @@ pnpm package:win
 
 ## 6. macOS 설치와 설정
 
-1. [Releases](https://github.com/mynameisjinhohong/interview-studio/releases)에서 Apple Silicon용 `Interview.Studio-0.2.8-arm64.dmg`를 내려받습니다.
+1. [Releases](https://github.com/mynameisjinhohong/interview-studio/releases)에서 Apple Silicon용 `Interview.Studio-0.2.9-arm64.dmg`를 내려받습니다.
 2. 앱을 Applications 폴더로 옮깁니다.
 3. 서명되지 않은 alpha 경고가 뜨면 `시스템 설정` → `개인정보 보호 및 보안`에서 차단된 Interview Studio의 `확인 없이 열기`를 선택합니다.
 4. 터미널에서 사용할 CLI를 설치하고 로그인한 뒤 앱을 다시 시작합니다.
@@ -248,10 +248,13 @@ Windows 권한과 물리적 연결을 확인하고 장치를 사용하는 다른
 
 프로필이나 조사 컨텍스트가 크면 LLM 호출이 길어질 수 있습니다. 면접 준비 단계의 웹 조사와 본 질문 생성에는 짧은 고정 타임아웃을 적용하지 않으며, 화면에 경과 시간과 `준비 취소` 버튼을 표시합니다. 기다리기 어렵다면 취소 버튼으로 현재 CLI 작업을 종료할 수 있습니다. 프로필의 개별 요약 호출은 최대 120초, 전체 컨텍스트 생성은 최대 5분을 허용합니다.
 
-### 전형 단계와 질문 초점
+### 전형 단계와 질문 구성
 
-- `자동 추천`에서 1차 직무 면접은 기초 CS·기술 기본기, 2차 면접은 포트폴리오·프로젝트 의사결정, 임원 면접은 협업·직무 적합성 비중이 높습니다.
-- 전형 단계와 무관하게 연습하고 싶으면 `기초 CS 중심`, `포트폴리오 중심`, `균형`을 직접 선택할 수 있습니다.
+- 별도의 질문 초점 설정 없이 전형 단계가 질문 구성을 결정합니다.
+- 1차 직무 면접은 기본 5문항 기준 `순수 CS 3 + 포트폴리오 연계 CS 1 + 포트폴리오 경험 1`입니다.
+- 2차 면접은 기본 5문항 기준 `순수 CS 1 + 포트폴리오 연계 CS 1 + 포트폴리오 경험 2 + 적합성 1`입니다.
+- 순수 CS 질문 생성에는 프로필과 포트폴리오 원문을 전달하지 않습니다. 직무·경력 수준·기술 스택만으로 지원자의 기본 지식을 확인합니다.
+- 포트폴리오 연계 CS는 특정 구현이나 기술 선택의 배경 원리를 묻는 별도 분류이며, 순수 CS 문항 수에 포함하지 않습니다.
 - 같은 프로필·회사·직무의 최근 세션 질문은 새 질문 생성 시 제외 목록으로 사용됩니다. 완전히 같은 분야를 다시 다룰 필요가 있으면 다른 난이도나 상황으로 질문합니다.
 
 ### 최종 평가가 오래 걸림

@@ -1,7 +1,8 @@
 import { mkdirSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { z } from 'zod'
 import {
-  finalReportSchema, followUpDecisionSchema, questionPlanSchema, sessionConfigSchema,
+  finalReportSchema, followUpDecisionSchema, questionPlanSchema, questionSchema, sessionConfigSchema,
   type CompleteTurnInput, type FinalReport, type InterviewSession, type InterviewTurn, type SessionConfig
 } from '../../shared/contracts.js'
 import { finalReportJsonSchema, followUpJsonSchema, questionPlanJsonSchema } from '../../shared/llm-schemas.js'
@@ -18,9 +19,32 @@ const normalizePlan = (plan: ReturnType<typeof questionPlanSchema.parse>, count:
   if (plan.questions.length < count) throw new Error(`질문 계획이 ${count}개보다 적습니다.`)
   return {
     ...plan,
-    questions: plan.questions.slice(0, count).map((question, index) => ({ ...question, id: question.id || `q-${index + 1}` }))
+    questions: plan.questions.slice(0, count).map((question, index) => ({ ...question, id: `q-${index + 1}` }))
   }
 }
+
+const questionBatchJsonSchema = (count: number): object => ({
+  ...questionPlanJsonSchema,
+  properties: {
+    ...questionPlanJsonSchema.properties,
+    questions: { ...questionPlanJsonSchema.properties.questions, minItems: count, maxItems: count }
+  }
+})
+
+const questionBatchSchema = (
+  count: number,
+  categoryCounts: Partial<Record<ReturnType<typeof questionSchema.parse>['category'], number>>
+) => z.object({ title: z.string(), questions: z.array(questionSchema).length(count) }).superRefine((candidate, context) => {
+  for (const [category, expected] of Object.entries(categoryCounts)) {
+    const actual = candidate.questions.filter((question) => question.category === category).length
+    if (actual !== expected) context.addIssue({ code: 'custom', message: `${category} 질문은 ${expected}개여야 하지만 ${actual}개입니다.` })
+  }
+  if (categoryCounts.cs === count) {
+    candidate.questions.forEach((question, index) => {
+      if (question.sourceUrls.length) context.addIssue({ code: 'custom', path: ['questions', index, 'sourceUrls'], message: '순수 CS 질문에는 포트폴리오 출처를 연결할 수 없습니다.' })
+    })
+  }
+})
 
 const writeJsonAtomically = (path: string, value: unknown): void => {
   const temporary = `${path}.partial`
@@ -62,31 +86,43 @@ export class InterviewService {
         effectiveStacks = research.inferredStacks.length ? research.inferredStacks : [config.role || profile.targetRole]
       }
       const strategy = resolveQuestionStrategy(config, effectiveType)
-      const strategyPlanSchema = questionPlanSchema.superRefine((candidate, context) => {
-        if (candidate.questions.length !== config.questionCount) {
-          context.addIssue({ code: 'custom', message: `본 질문은 정확히 ${config.questionCount}개여야 합니다.` })
-          return
-        }
-        for (const category of ['cs', 'portfolio', 'fit'] as const) {
-          const actual = candidate.questions.filter((question) => question.category === category).length
-          if (actual !== strategy.counts[category]) {
-            context.addIssue({ code: 'custom', message: `${category} 질문은 ${strategy.counts[category]}개여야 하지만 ${actual}개입니다.` })
-          }
-        }
+      const adapter = this.cli.get(config.provider)
+      const sharedInput = {
+        mode: config.mode, experienceLevel: config.experienceLevel, stacks: effectiveStacks,
+        focusAreas: config.focusAreas, excludedAreas: config.excludedAreas,
+        company: effectiveType === 'company' ? config.company : '', role: config.role, stage: config.stage,
+        recentQuestionExclusions
+      }
+      const pureCsCount = strategy.counts.cs
+      const contextualCount = config.questionCount - pureCsCount
+      const pureCsPromise = pureCsCount > 0
+        ? adapter.invokeStructured(
+          `포트폴리오와 독립적인 한국어 순수 CS 본 질문을 정확히 ${pureCsCount}개 만드세요. 지원자의 포트폴리오 원문은 제공되지 않으며 질문에 프로젝트명, 구현 경험, 성과, 포트폴리오에 기록된 사실을 언급하거나 암시하면 안 됩니다. 직무·경력 수준·기술 스택만 보고 "이 지원자가 이 기본 지식을 알고 있는가"를 검증하세요. 자료구조·알고리즘·운영체제·네트워크·언어/런타임·메모리·동시성·설계 원칙에서 서로 다른 핵심 역량을 선택하세요. 모든 category는 cs여야 하며 sourceUrls는 빈 배열이어야 합니다. recentQuestionExclusions와 의미상 중복하지 마세요.`,
+          { ...sharedInput, questionCategory: 'cs', questionCount: pureCsCount },
+          questionBatchJsonSchema(pureCsCount), questionBatchSchema(pureCsCount, { cs: pureCsCount }),
+          { model: config.modelOverride, timeoutMs: null, idleTimeoutMs: null, signal: controller.signal }
+        )
+        : Promise.resolve({ title: '', questions: [] })
+      const contextualPromise = contextualCount > 0
+        ? adapter.invokeStructured(
+          `지원자 컨텍스트를 사용하는 한국어 면접 본 질문을 정확히 ${contextualCount}개 만드세요. category별 문항 수를 정확히 지키세요. portfolio-cs는 포트폴리오의 구체적인 기술 선택이나 구현을 출발점으로 그 배경의 CS 원리·트레이드오프를 검증하는 질문입니다. portfolio는 실제 역할·의사결정·문제 해결·성과를 검증하며 이론 지식 자체가 중심이면 안 됩니다. fit은 협업·행동·회사/직무 적합성을 검증합니다. portfolio-cs와 portfolio를 서로 바꾸거나 순수 cs로 분류하지 마세요. 질문마다 하나의 핵심 역량만 검증하고 recentQuestionExclusions와 의미상 중복하지 마세요.`,
+          {
+            ...sharedInput, questionCategory: 'contextual', questionCount: contextualCount,
+            categoryCounts: { 'portfolio-cs': strategy.counts['portfolio-cs'], portfolio: strategy.counts.portfolio, fit: strategy.counts.fit },
+            profileContext: profile.contextMarkdown.slice(0, 24_000), research: research.summary,
+            sources: research.sources.map(({ title, url, summary }) => ({ title, url, summary }))
+          },
+          questionBatchJsonSchema(contextualCount), questionBatchSchema(contextualCount, {
+            'portfolio-cs': strategy.counts['portfolio-cs'], portfolio: strategy.counts.portfolio, fit: strategy.counts.fit
+          }),
+          { model: config.modelOverride, timeoutMs: null, idleTimeoutMs: null, signal: controller.signal }
+        )
+        : Promise.resolve({ title: '', questions: [] })
+      const [pureCsPlan, contextualPlan] = await Promise.all([pureCsPromise, contextualPromise])
+      const plan = questionPlanSchema.parse({
+        title: contextualPlan.title || pureCsPlan.title || `${config.role || effectiveStacks.join(', ')} 면접`,
+        questions: [...pureCsPlan.questions, ...contextualPlan.questions]
       })
-      const plan = await this.cli.get(config.provider).invokeStructured(
-        `한국어 ${effectiveType === 'company' ? '회사 맞춤' : '기술'} 면접의 본 질문 ${config.questionCount}개를 만드세요. 각 질문은 하나의 주제와 하나의 핵심 역량만 검증해야 합니다. 질문 계획 내부에서 핵심 역량과 질문 각도를 중복하지 마세요. recentQuestionExclusions와는 표현만 바꾸는 수준도 피하고, 같은 분야가 꼭 필요하면 난이도·상황·검증 관점을 실질적으로 다르게 만드세요. questionStrategy.counts의 문항 수를 지키세요. CS는 자료구조·알고리즘·운영체제·네트워크·언어/런타임·동시성·메모리·설계 원칙 등 직무 기본기, portfolio는 실제 프로젝트의 선택·트레이드오프·성과·문제 해결, fit은 협업·행동·회사/직무 적합성을 의미합니다. suggestedFollowUps는 실제 답변이 없을 때만 참고할 예시이며 최대 4개입니다.`,
-        {
-          mode: config.mode, experienceLevel: config.experienceLevel, stacks: effectiveStacks,
-          focusAreas: config.focusAreas, excludedAreas: config.excludedAreas,
-          company: effectiveType === 'company' ? config.company : '', role: config.role, stage: config.stage,
-          questionStrategy: strategy, recentQuestionExclusions,
-          profileContext: profile.contextMarkdown.slice(0, 24_000), research: research.summary,
-          sources: research.sources.map(({ title, url, summary }) => ({ title, url, summary }))
-        },
-        questionPlanJsonSchema, strategyPlanSchema,
-        { model: config.modelOverride, timeoutMs: null, idleTimeoutMs: null, signal: controller.signal }
-      )
       const normalizedPlan = normalizePlan(plan, config.questionCount)
       const sessionFolder = join(this.db.root, 'sessions', session.id)
       mkdirSync(sessionFolder, { recursive: true })
