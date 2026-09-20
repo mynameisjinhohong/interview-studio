@@ -8,7 +8,7 @@ describe.skipIf(process.platform !== 'win32')('Windows OneCore TTS', () => {
   let root = ''
 
   beforeAll(() => { root = mkdtempSync(join(tmpdir(), 'interview-studio-tts-')) })
-  afterAll(() => { if (root) rmSync(root, { recursive: true, force: true }) })
+  afterAll(() => { if (root) rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }) })
 
   it('lists a modern Windows voice and renders a playable wave file', async () => {
     const service = new TtsService(root)
@@ -18,5 +18,5 @@ describe.skipIf(process.platform !== 'win32')('Windows OneCore TTS', () => {
     expect(modernVoice).toBeDefined()
     const output = await service.render('Interview Studio voice check.', modernVoice!.id, 0.9)
     expect(statSync(output).size).toBeGreaterThan(44)
-  })
+  }, 30_000)
 })

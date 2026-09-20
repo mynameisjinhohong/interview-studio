@@ -29,8 +29,11 @@ export class TtsService {
           }))
         }
       } catch { /* The legacy SAPI fallback below remains available. */ }
+      if (oneCoreVoices.some((voice) => voice.language.toLowerCase().startsWith('ko'))) return oneCoreVoices
       const command = 'Add-Type -AssemblyName System.Speech; (New-Object System.Speech.Synthesis.SpeechSynthesizer).GetInstalledVoices() | ForEach-Object { $_.VoiceInfo.Name + "|" + $_.VoiceInfo.Culture.Name }'
-      const result = await runProcess('powershell.exe', ['-NoProfile', '-Command', command], { cwd: this.root, timeoutMs: 10_000 })
+      let result
+      try { result = await runProcess('powershell.exe', ['-NoProfile', '-Command', command], { cwd: this.root, timeoutMs: 10_000 }) }
+      catch { return oneCoreVoices }
       const sapiVoices = result.stdout.split('\n').filter(Boolean).map((line) => {
         const [name, language] = line.trim().split('|')
         return { id: `${SAPI_PREFIX}${name}`, name, language }
