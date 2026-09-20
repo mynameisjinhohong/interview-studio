@@ -6,10 +6,11 @@ import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { homedir } from 'node:os'
 import type { SttModel, SttStatus } from '../../shared/contracts.js'
+import { resolveBundledExecutable } from './bundled-executable.js'
 import { DiagnosticLogger } from './logger.js'
 import { runProcess } from './process-runner.js'
 
-const ffmpegStatic = createRequire(import.meta.url)('ffmpeg-static') as string | null
+const ffmpegStaticPath = createRequire(import.meta.url)('ffmpeg-static') as string | null
 
 const MODEL_MANIFEST = {
   base: {
@@ -93,11 +94,12 @@ export class SttService {
   async transcribe(audioPath: string, model: SttModel): Promise<string> {
     const whisper = findWhisper(this.root)
     const modelPath = this.modelPath(model)
+    const ffmpeg = resolveBundledExecutable(ffmpegStaticPath)
     if (!whisper) throw new Error('whisper-cli 실행 파일을 찾을 수 없습니다. README의 설치 안내를 확인하세요.')
     if (!existsSync(modelPath)) throw new Error(`${model} STT 모델을 먼저 다운로드하세요.`)
-    if (!ffmpegStatic) throw new Error('FFmpeg 실행 파일을 찾을 수 없습니다.')
+    if (!ffmpeg) throw new Error('FFmpeg 실행 파일이 설치본에 포함되지 않았습니다. 앱을 다시 설치하세요.')
     const wavPath = `${audioPath}.wav`
-    await runProcess(ffmpegStatic, ['-y', '-i', audioPath, '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', wavPath], { cwd: this.root, timeoutMs: 60_000 })
+    await runProcess(ffmpeg, ['-y', '-i', audioPath, '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', wavPath], { cwd: this.root, timeoutMs: 60_000 })
     let lastError: unknown
     for (let attempt = 0; attempt < 4; attempt += 1) {
       try {

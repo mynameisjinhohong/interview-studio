@@ -12,7 +12,7 @@ on:
         description: Release tag
         type: string
         required: true
-        default: v0.2.6
+        default: v0.2.7
 
 permissions:
   contents: write
@@ -72,6 +72,16 @@ jobs:
       - name: Package unsigned Windows installer
         run: pnpm package:win
 
+      - name: Verify packaged FFmpeg executable
+        shell: pwsh
+        run: |
+          $ffmpeg = Get-ChildItem -Path "release" -Recurse -Filter "ffmpeg.exe" |
+            Where-Object { $_.FullName -like "*app.asar.unpacked*ffmpeg-static*" } |
+            Select-Object -First 1
+          if (-not $ffmpeg) {
+            throw "Packaged ffmpeg.exe was not found under app.asar.unpacked"
+          }
+
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
@@ -96,7 +106,7 @@ jobs:
             gh release create $tag $installer.FullName `
               --repo $env:GITHUB_REPOSITORY `
               --target $env:GITHUB_SHA `
-              --title "Interview Studio 0.2.6 alpha" `
-              --notes-file "docs/RELEASE_NOTES_0.2.6.md" `
+              --title "Interview Studio 0.2.7 alpha" `
+              --notes-file "docs/RELEASE_NOTES_0.2.7.md" `
               --prerelease
           }

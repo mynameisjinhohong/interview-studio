@@ -11,6 +11,7 @@ import type {
 } from '../../shared/contracts'
 import { ANSWER_LIMIT_SECONDS, answerWarning } from '../../shared/interview-rules'
 import { AudioSampleController, ExclusiveAudioPlayer } from '../../shared/audio-playback'
+import { hasRecordedMicrophoneSignal, microphoneLevelPercent } from '../../shared/microphone-test'
 import {
   HIGH_QUALITY_STT_MODEL, canCompleteInitialSetup, interviewReadinessError,
   koreanVoices, selectPreferredKoreanVoice, voiceQualityLabel
@@ -292,12 +293,14 @@ function InterviewRoom(): JSX.Element {
   const [session, setSession] = useState<InterviewSession | null>(null), [deviceReady, setDeviceReady] = useState(false), [started, setStarted] = useState(false)
   const [sttStatus, setSttStatus] = useState<SttStatus | null>(null), [sttModel, setSttModel] = useState<AppSettings['sttModel']>('small')
   const [busyModel, setBusyModel] = useState(false), [voiceReady, setVoiceReady] = useState(false)
+  const [micLevel, setMicLevel] = useState(0), [micTestState, setMicTestState] = useState<'idle' | 'recording' | 'playing' | 'passed'>('idle')
   const [phase, setPhase] = useState<'idle' | 'asking' | 'listening' | 'analyzing' | 'paused'>('idle')
   const [baseIndex, setBaseIndex] = useState(0), [depth, setDepth] = useState(0), [followUp, setFollowUp] = useState<string | null>(null)
   const [remaining, setRemaining] = useState(ANSWER_LIMIT_SECONDS), [revealed, setRevealed] = useState(false), [replayed, setReplayed] = useState(false)
   const [error, setError] = useState(''), [practiceReview, setPracticeReview] = useState<{ turn: InterviewTurn; decision: FollowUpDecision } | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null), streamRef = useRef<MediaStream | null>(null), recorderRef = useRef<MediaRecorder | null>(null)
   const answerRecorderRef = useRef<MediaRecorder | null>(null), answerChunksRef = useRef<Blob[]>([]), recordingSequence = useRef(0), answerStarted = useRef(Date.now()), audioUrlRef = useRef('')
+  const micLevelRef = useRef(0), micContextRef = useRef<AudioContext | null>(null), micFrameRef = useRef<number | null>(null), micTestAudioRef = useRef<HTMLAudioElement | null>(null)
   const deviceSamplePlayer = useRef<ExclusiveAudioPlayer | null>(null)
   if (!deviceSamplePlayer.current) deviceSamplePlayer.current = new ExclusiveAudioPlayer((url) => new Audio(url))
   const pendingRecordingChunks = useRef(new Set<Promise<void>>()), retriedAnswers = useRef(new Set<string>())
@@ -333,22 +336,90 @@ function InterviewRoom(): JSX.Element {
     const timer = window.setInterval(() => setRemaining((value) => { if (value <= 1) { window.clearInterval(timer); void submitAnswer(true); return 0 } return value - 1 }), 1000)
     return () => window.clearInterval(timer)
   }, [phase])
-  useEffect(() => () => { streamRef.current?.getTracks().forEach((track) => track.stop()); deviceSamplePlayer.current?.stop() }, [])
+  useEffect(() => () => {
+    streamRef.current?.getTracks().forEach((track) => track.stop())
+    deviceSamplePlayer.current?.stop()
+    micTestAudioRef.current?.pause()
+    if (micFrameRef.current !== null) cancelAnimationFrame(micFrameRef.current)
+    void micContextRef.current?.close()
+  }, [])
 
   const currentBase = session?.questionPlan?.questions[baseIndex]
   const currentQuestion: InterviewQuestion | null = currentBase ? { ...currentBase, question: followUp ?? currentBase.question } : null
   const currentAnswerKey = currentBase ? `${currentBase.id}:${depth}` : ''
 
   const setupDevices = async () => {
-    setError('')
+    setError(''); setDeviceReady(false); setMicTestState('idle'); setMicLevel(0); micLevelRef.current = 0
     try {
+      streamRef.current?.getTracks().forEach((track) => track.stop())
+      if (micFrameRef.current !== null) cancelAnimationFrame(micFrameRef.current)
+      await micContextRef.current?.close()
       let stream: MediaStream
       try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } } }) }
       catch { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false }) }
       streamRef.current = stream
       if (videoRef.current) { videoRef.current.srcObject = stream; await videoRef.current.play() }
-      setDeviceReady(true)
+      const context = new AudioContext()
+      await context.resume()
+      const analyser = context.createAnalyser()
+      analyser.fftSize = 256
+      context.createMediaStreamSource(new MediaStream(stream.getAudioTracks())).connect(analyser)
+      const samples = new Uint8Array(analyser.fftSize)
+      const updateLevel = () => {
+        analyser.getByteTimeDomainData(samples)
+        const level = microphoneLevelPercent(samples)
+        micLevelRef.current = level
+        setMicLevel(level)
+        micFrameRef.current = requestAnimationFrame(updateLevel)
+      }
+      micContextRef.current = context
+      updateLevel()
+      setMicTestState('idle'); setDeviceReady(true)
     } catch (reason) { setError(`마이크를 사용할 수 없습니다: ${reason instanceof Error ? reason.message : String(reason)}`) }
+  }
+
+  const testMicrophone = async () => {
+    const audioTracks = streamRef.current?.getAudioTracks() ?? []
+    if (!audioTracks.length) { setError('먼저 장치 확인으로 마이크 권한을 허용하세요.'); return }
+    setError(''); setMicTestState('recording'); deviceSamplePlayer.current?.stop(); micTestAudioRef.current?.pause()
+    let peakTimer: number | null = null
+    try {
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm'
+      const recorder = new MediaRecorder(new MediaStream(audioTracks), { mimeType })
+      const chunks: Blob[] = []
+      let peakLevel = micLevelRef.current
+      peakTimer = window.setInterval(() => { peakLevel = Math.max(peakLevel, micLevelRef.current) }, 50)
+      recorder.ondataavailable = (event) => { if (event.data.size) chunks.push(event.data) }
+      recorder.start(200)
+      await new Promise((resolve) => window.setTimeout(resolve, 4_000))
+      const blob = await new Promise<Blob>((resolve) => {
+        recorder.onstop = () => resolve(new Blob(chunks, { type: mimeType }))
+        recorder.stop()
+      })
+      window.clearInterval(peakTimer); peakTimer = null
+      if (!hasRecordedMicrophoneSignal(peakLevel, blob.size)) {
+        setMicTestState('idle')
+        throw new Error('녹음에서 음성 신호를 감지하지 못했습니다. Windows 입력 장치와 마이크 음소거를 확인하세요.')
+      }
+      setMicTestState('playing')
+      const url = URL.createObjectURL(blob)
+      try {
+        const audio = new Audio(url)
+        micTestAudioRef.current = audio
+        await audio.play()
+        await new Promise<void>((resolve, reject) => {
+          audio.onended = () => resolve()
+          audio.onerror = () => reject(new Error('마이크 테스트 녹음을 재생하지 못했습니다.'))
+        })
+      } finally {
+        URL.revokeObjectURL(url)
+        micTestAudioRef.current = null
+      }
+      setMicTestState('passed')
+    } catch (reason) {
+      setMicTestState('idle')
+      setError(`마이크 테스트 실패: ${reason instanceof Error ? reason.message : String(reason)}`)
+    } finally { if (peakTimer !== null) window.clearInterval(peakTimer) }
   }
 
   const downloadSelectedModel = async () => {
@@ -412,7 +483,7 @@ function InterviewRoom(): JSX.Element {
       setSttStatus(latestStatus)
       const readinessError = interviewReadinessError(latestStatus, sttModel)
       if (readinessError) throw new Error(readinessError)
-      if (!deviceReady) throw new Error('마이크 점검을 먼저 완료하세요.')
+      if (!deviceReady || micTestState !== 'passed') throw new Error('마이크 녹음 테스트를 먼저 완료하세요.')
       if (!voiceReady) throw new Error('면접관 음성 샘플을 먼저 확인하세요.')
       await api.startSession(id)
       setStarted(true); startContinuousRecording(); await speak(currentQuestion!.question, false)
@@ -464,10 +535,11 @@ function InterviewRoom(): JSX.Element {
   if (!session || !currentQuestion) return <LoadingScreen />
   if (!started) {
     const sttReadinessError = interviewReadinessError(sttStatus, sttModel)
-    const allReady = deviceReady && !sttReadinessError && voiceReady
+    const allReady = deviceReady && micTestState === 'passed' && !sttReadinessError && voiceReady
     return <div className="interview-screen device-screen"><Link to="/new" className="back"><ArrowLeft /> 돌아가기</Link><div className="device-card"><div className="eyebrow">DEVICE CHECK</div><h1>면접 환경을 확인하세요</h1><p>첫 답변 전에 마이크·음성 인식·면접관 음성을 모두 실제로 점검합니다. 카메라는 선택 사항입니다.</p><div className="camera-preview"><video ref={videoRef} muted playsInline /><Camera /></div>
       <div className="device-readiness">
-        <div className={deviceReady ? 'ready' : ''}><Mic /><span><b>마이크·카메라</b><small>{deviceReady ? `마이크 준비 완료${streamRef.current?.getVideoTracks().length ? ' · 카메라 연결됨' : ' · 카메라 없이 진행'}` : '권한과 입력 장치를 확인합니다.'}</small></span>{deviceReady ? <Check /> : <button onClick={setupDevices}>장치 확인</button>}</div>
+        <div className={deviceReady ? 'ready' : ''}><Camera /><span><b>입력 장치 권한</b><small>{deviceReady ? `마이크 연결됨${streamRef.current?.getVideoTracks().length ? ' · 카메라 연결됨' : ' · 카메라 없이 진행'}` : '마이크 권한과 카메라를 확인합니다.'}</small></span>{deviceReady ? <button onClick={setupDevices}>다시 연결</button> : <button onClick={setupDevices}>장치 확인</button>}</div>
+        <div className={micTestState === 'passed' ? 'ready' : ''}><Mic /><span><b>마이크 녹음 테스트</b><small>{micTestState === 'recording' ? '4초 동안 말씀해 주세요…' : micTestState === 'playing' ? '방금 녹음한 목소리를 재생 중입니다…' : micTestState === 'passed' ? '입력 신호와 녹음 재생 확인 완료' : deviceReady ? '입력 레벨을 확인하고 4초 녹음을 들어봅니다.' : '장치를 먼저 연결하세요.'}</small>{deviceReady && <i className="mic-level" aria-label={`마이크 입력 레벨 ${micLevel}%`}><i style={{ width: `${micLevel}%` }} /></i>}</span>{micTestState === 'passed' ? <button onClick={testMicrophone}>다시 테스트</button> : <button disabled={!deviceReady || micTestState !== 'idle'} onClick={testMicrophone}>{micTestState === 'recording' ? '녹음 중…' : micTestState === 'playing' ? '재생 중…' : '녹음 후 듣기'}</button>}</div>
         <div className={!sttReadinessError ? 'ready' : ''}><Sparkles /><span><b>{sttModel} 음성 인식 모델</b><small>{!sttReadinessError ? '로컬 전사 준비 완료' : sttReadinessError}</small></span>{!sttReadinessError ? <Check /> : sttStatus?.binary ? <button disabled={busyModel} onClick={downloadSelectedModel}>{busyModel ? <LoaderCircle className="spin" /> : <Download />}{busyModel ? '다운로드 중…' : '다운로드'}</button> : <X />}</div>
         <div className={voiceReady ? 'ready' : ''}><Volume2 /><span><b>면접관 음성</b><small>{voiceReady ? '출력 장치와 음성 재생 확인 완료' : '실제 질문과 같은 방식으로 재생합니다.'}</small></span>{voiceReady ? <Check /> : <button onClick={testInterviewVoice}>샘플 듣기</button>}</div>
       </div>

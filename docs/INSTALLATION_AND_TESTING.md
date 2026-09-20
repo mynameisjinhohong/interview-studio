@@ -1,6 +1,6 @@
 # Interview Studio 설치 및 테스트 가이드
 
-이 문서는 개인용 alpha 버전 `0.2.6`을 다른 PC에서 내려받아 실행하고, 카메라·마이크·AI CLI를 연결해 첫 면접을 테스트하는 절차를 설명합니다.
+이 문서는 개인용 alpha 버전 `0.2.7`을 다른 PC에서 내려받아 실행하고, 카메라·마이크·AI CLI를 연결해 첫 면접을 테스트하는 절차를 설명합니다.
 
 ## 1. 지원 범위
 
@@ -20,7 +20,7 @@
 
 1. 저장소가 private이므로 Windows PC의 브라우저에서 GitHub 계정 `mynameisjinhohong`로 로그인합니다.
 2. [Interview Studio Releases](https://github.com/mynameisjinhohong/interview-studio/releases)에서 최신 prerelease를 엽니다.
-3. `Interview.Studio-0.2.6-x64.exe`를 내려받습니다.
+3. `Interview.Studio-0.2.7-x64.exe`를 내려받습니다.
 4. SmartScreen이 표시되면 게시자가 `알 수 없음`인 개인용 alpha임을 확인하고, 신뢰할 수 있는 저장소에서 직접 받은 파일일 때만 `추가 정보` → `실행`을 선택합니다.
 5. 설치 위치를 선택해 설치한 뒤 Interview Studio를 실행합니다.
 
@@ -148,9 +148,11 @@ Windows `설정` → `개인 정보 및 보안`에서 다음을 켭니다.
 
 1. 새 면접을 만들고 `장치 점검`까지 이동합니다.
 2. `장치 확인`으로 마이크 권한과 카메라 미리보기를 확인합니다.
-3. 선택된 STT 모델이 설치되지 않았다면 이 화면에서 다운로드합니다.
-4. 현재 선택한 면접관 음성 샘플을 재생합니다.
-5. 세 항목이 모두 준비된 뒤에만 `면접 시작` 버튼이 활성화됩니다.
+3. 마이크에 대고 말해 실시간 입력 레벨 막대가 움직이는지 확인합니다.
+4. `녹음 후 듣기`를 누르고 4초 동안 말한 뒤 재생되는 자신의 목소리를 확인합니다. 무음이나 빈 녹음은 통과하지 않습니다.
+5. 선택된 STT 모델이 설치되지 않았다면 이 화면에서 다운로드합니다.
+6. 현재 선택한 면접관 음성 샘플을 재생합니다.
+7. 모든 필수 점검이 준비된 뒤에만 `면접 시작` 버튼이 활성화됩니다.
 
 ## 4. 첫 통합 테스트 시나리오
 
@@ -188,7 +190,7 @@ pnpm build
 pnpm package:win
 ```
 
-생성물은 `release\0.2.6\`에 저장됩니다. 소스로 실행한 경우에는 Release 설치본과 달리 `whisper-cli.exe`가 자동으로 포함되지 않습니다. `whisper.cpp`를 빌드한 뒤 실행 파일과 DLL을 아래 둘 중 한 위치에 함께 두십시오.
+생성물은 `release\0.2.7\`에 저장됩니다. 소스로 실행한 경우에는 Release 설치본과 달리 `whisper-cli.exe`가 자동으로 포함되지 않습니다. `whisper.cpp`를 빌드한 뒤 실행 파일과 DLL을 아래 둘 중 한 위치에 함께 두십시오.
 
 - `%APPDATA%\Interview Studio\runtime\bin`
 - `%LOCALAPPDATA%\whisper.cpp`
@@ -197,7 +199,7 @@ pnpm package:win
 
 ## 6. macOS 설치와 설정
 
-1. [Releases](https://github.com/mynameisjinhohong/interview-studio/releases)에서 Apple Silicon용 `Interview.Studio-0.2.6-arm64.dmg`를 내려받습니다.
+1. [Releases](https://github.com/mynameisjinhohong/interview-studio/releases)에서 Apple Silicon용 `Interview.Studio-0.2.7-arm64.dmg`를 내려받습니다.
 2. 앱을 Applications 폴더로 옮깁니다.
 3. 서명되지 않은 alpha 경고가 뜨면 `시스템 설정` → `개인정보 보호 및 보안`에서 차단된 Interview Studio의 `확인 없이 열기`를 선택합니다.
 4. 터미널에서 사용할 CLI를 설치하고 로그인한 뒤 앱을 다시 시작합니다.
@@ -229,6 +231,10 @@ Node.js와 CLI가 서로 다른 환경에 설치됐거나 앱이 시작된 시�
 ### `whisper-cli 실행 파일을 찾을 수 없습니다`
 
 Releases의 Windows 설치 파일인지 확인합니다. 소스로 실행 중이면 5절의 경로에 `whisper-cli.exe`와 같은 빌드 폴더의 DLL을 함께 복사합니다.
+
+### `resources\app.asar\node_modules\ffmpeg-static\ffmpeg.exe ENOENT`
+
+0.2.6 이하 설치본이 압축 해제된 FFmpeg의 실제 위치 대신 `app.asar` 내부 경로를 실행해 발생합니다. 0.2.7 이상으로 업데이트하십시오. 최신 설치본은 `app.asar.unpacked`의 FFmpeg를 사용하고 빌드 중 실행 파일 포함 여부도 검사합니다.
 
 ### `STT 모델 무결성 검증에 실패했습니다`
 

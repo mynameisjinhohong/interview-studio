@@ -1,9 +1,10 @@
 import { createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
+import { resolveBundledExecutable } from './bundled-executable.js'
 import { runProcess } from './process-runner.js'
 
-const ffmpegStatic = createRequire(import.meta.url)('ffmpeg-static') as string | null
+const ffmpegStaticPath = createRequire(import.meta.url)('ffmpeg-static') as string | null
 
 export class RecordingService {
   constructor(private root: string) {}
@@ -37,10 +38,11 @@ export class RecordingService {
     return outputPath
   }
   async exportMp4(inputPath: string, outputPath: string): Promise<void> {
-    if (!existsSync(inputPath) || !ffmpegStatic) throw new Error('변환할 영상 또는 FFmpeg를 찾을 수 없습니다.')
+    const ffmpeg = resolveBundledExecutable(ffmpegStaticPath)
+    if (!existsSync(inputPath) || !ffmpeg) throw new Error('변환할 영상 또는 FFmpeg를 찾을 수 없습니다.')
     const encoder = process.platform === 'darwin' ? 'h264_videotoolbox' : process.platform === 'win32' ? 'h264_mf' : 'mpeg4'
-    let result = await runProcess(ffmpegStatic, ['-y', '-i', inputPath, '-c:v', encoder, '-c:a', 'aac', '-movflags', '+faststart', outputPath], { cwd: this.root, timeoutMs: 600_000 })
-    if (result.exitCode !== 0) result = await runProcess(ffmpegStatic, ['-y', '-i', inputPath, '-c:v', 'mpeg4', '-c:a', 'aac', outputPath], { cwd: this.root, timeoutMs: 600_000 })
+    let result = await runProcess(ffmpeg, ['-y', '-i', inputPath, '-c:v', encoder, '-c:a', 'aac', '-movflags', '+faststart', outputPath], { cwd: this.root, timeoutMs: 600_000 })
+    if (result.exitCode !== 0) result = await runProcess(ffmpeg, ['-y', '-i', inputPath, '-c:v', 'mpeg4', '-c:a', 'aac', outputPath], { cwd: this.root, timeoutMs: 600_000 })
     if (result.exitCode !== 0) throw new Error('MP4 변환에 실패했습니다.')
   }
 }
