@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto'
-import { createReadStream, createWriteStream, existsSync, renameSync, rmSync, statSync } from 'node:fs'
+import { createReadStream, createWriteStream, existsSync, mkdirSync, renameSync, rmSync, statSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
 import { homedir } from 'node:os'
 import type { SttModel, SttStatus } from '../../shared/contracts.js'
 import { DiagnosticLogger } from './logger.js'
@@ -10,11 +11,34 @@ import { runProcess } from './process-runner.js'
 
 const ffmpegStatic = createRequire(import.meta.url)('ffmpeg-static') as string | null
 
-const MODEL_URLS = {
-  base: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin',
-  small: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin',
-  medium: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin'
+const MODEL_MANIFEST = {
+  base: {
+    url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin',
+    size: 147_951_465,
+    sha256: '60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe'
+  },
+  small: {
+    url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin',
+    size: 487_601_967,
+    sha256: '1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b'
+  },
+  medium: {
+    url: 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin',
+    size: 1_533_763_059,
+    sha256: '6c14d5adee5f86394037b4e4e8b59f1673b6cee10e3cf0b11bbdbee79c156208'
+  }
 } as const
+
+export const validateSttModelArtifact = (
+  model: keyof typeof MODEL_MANIFEST,
+  actualSize: number,
+  actualSha256: string,
+  _responseEtag = ''
+): void => {
+  const expected = MODEL_MANIFEST[model]
+  if (actualSize !== expected.size) throw new Error('STT 모델 무결성 검증 실패: 파일 크기가 일치하지 않습니다.')
+  if (actualSha256.toLowerCase() !== expected.sha256) throw new Error('STT 모델 무결성 검증 실패: SHA-256이 일치하지 않습니다.')
+}
 
 const findWhisper = (root: string): string | null => {
   const candidates = process.platform === 'win32' ? ['whisper-cli.exe', 'whisper.exe'] : ['whisper-cli', 'whisper']
@@ -32,38 +56,38 @@ const findWhisper = (root: string): string | null => {
 }
 
 export class SttService {
-  constructor(private root: string, private logger: DiagnosticLogger) {}
-  private modelPath(model: keyof typeof MODEL_URLS): string { return join(this.root, 'models', `ggml-${model}.bin`) }
+  constructor(private root: string, private logger: DiagnosticLogger) {
+    mkdirSync(join(root, 'models'), { recursive: true })
+  }
+  private modelPath(model: keyof typeof MODEL_MANIFEST): string { return join(this.root, 'models', `ggml-${model}.bin`) }
   status(): SttStatus {
     return {
       binary: findWhisper(this.root),
-      models: Object.fromEntries(Object.keys(MODEL_URLS).map((key) => [key, existsSync(this.modelPath(key as SttModel))])) as Record<SttModel, boolean>
+      models: Object.fromEntries(Object.keys(MODEL_MANIFEST).map((key) => [key, existsSync(this.modelPath(key as SttModel))])) as Record<SttModel, boolean>
     }
   }
 
-  async download(model: keyof typeof MODEL_URLS): Promise<{ path: string; sha256: string }> {
+  async download(model: keyof typeof MODEL_MANIFEST): Promise<{ path: string; sha256: string }> {
     const path = this.modelPath(model)
     const partial = `${path}.partial`
-    const response = await fetch(MODEL_URLS[model], { redirect: 'follow' })
-    if (!response.ok || !response.body) throw new Error(`STT 모델 다운로드 실패: HTTP ${response.status}`)
-    const output = createWriteStream(partial)
-    await new Promise<void>((resolve, reject) => {
-      Readable.fromWeb(response.body as any).pipe(output).on('finish', resolve).on('error', reject)
-    })
-    if (statSync(partial).size < 1_000_000) throw new Error('다운로드한 모델 파일이 비정상적으로 작습니다.')
-    const digest = await new Promise<string>((resolve, reject) => {
-      const hash = createHash('sha256')
-      const input = createReadStream(partial)
-      input.on('data', (chunk) => hash.update(chunk))
-      input.on('end', () => resolve(hash.digest('hex')))
-      input.on('error', reject)
-    })
-    const etag = (response.headers.get('etag') ?? '').replace(/["']/g, '').replace(/^W\//, '')
-    if (/^[a-f0-9]{64}$/i.test(etag) && etag.toLowerCase() !== digest) {
-      rmSync(partial, { force: true }); throw new Error('STT 모델 무결성 검증에 실패했습니다.')
+    try {
+      const response = await fetch(MODEL_MANIFEST[model].url, { redirect: 'follow' })
+      if (!response.ok || !response.body) throw new Error(`STT 모델 다운로드 실패: HTTP ${response.status}`)
+      await pipeline(Readable.fromWeb(response.body as any), createWriteStream(partial))
+      const digest = await new Promise<string>((resolve, reject) => {
+        const hash = createHash('sha256')
+        const input = createReadStream(partial)
+        input.on('data', (chunk) => hash.update(chunk))
+        input.on('end', () => resolve(hash.digest('hex')))
+        input.on('error', reject)
+      })
+      validateSttModelArtifact(model, statSync(partial).size, digest, response.headers.get('etag') ?? '')
+      renameSync(partial, path)
+      return { path, sha256: digest }
+    } catch (error) {
+      rmSync(partial, { force: true })
+      throw error
     }
-    renameSync(partial, path)
-    return { path, sha256: digest }
   }
 
   async transcribe(audioPath: string, model: SttModel): Promise<string> {

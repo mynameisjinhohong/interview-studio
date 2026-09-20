@@ -12,7 +12,7 @@ on:
         description: Release tag
         type: string
         required: true
-        default: v0.2.5
+        default: v0.2.6
 
 permissions:
   contents: write
@@ -48,6 +48,11 @@ jobs:
         env:
           INTERVIEW_TTS_INTEGRATION: '1'
         run: pnpm vitest run tests/supertonic-integration.test.ts
+
+      - name: Verify STT model download integrity
+        env:
+          INTERVIEW_STT_DOWNLOAD_INTEGRATION: '1'
+        run: pnpm vitest run tests/stt-download-integration.test.ts
 
       - name: Build whisper.cpp sidecar
         shell: pwsh
@@ -91,7 +96,7 @@ jobs:
             gh release create $tag $installer.FullName `
               --repo $env:GITHUB_REPOSITORY `
               --target $env:GITHUB_SHA `
-              --title "Interview Studio 0.2.5 alpha" `
-              --notes-file "docs/RELEASE_NOTES_0.2.5.md" `
+              --title "Interview Studio 0.2.6 alpha" `
+              --notes-file "docs/RELEASE_NOTES_0.2.6.md" `
               --prerelease
           }

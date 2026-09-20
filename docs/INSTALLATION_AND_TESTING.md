@@ -1,6 +1,6 @@
 # Interview Studio 설치 및 테스트 가이드
 
-이 문서는 개인용 alpha 버전 `0.2.5`를 다른 PC에서 내려받아 실행하고, 카메라·마이크·AI CLI를 연결해 첫 면접을 테스트하는 절차를 설명합니다.
+이 문서는 개인용 alpha 버전 `0.2.6`을 다른 PC에서 내려받아 실행하고, 카메라·마이크·AI CLI를 연결해 첫 면접을 테스트하는 절차를 설명합니다.
 
 ## 1. 지원 범위
 
@@ -20,7 +20,7 @@
 
 1. 저장소가 private이므로 Windows PC의 브라우저에서 GitHub 계정 `mynameisjinhohong`로 로그인합니다.
 2. [Interview Studio Releases](https://github.com/mynameisjinhohong/interview-studio/releases)에서 최신 prerelease를 엽니다.
-3. `Interview.Studio-0.2.5-x64.exe`를 내려받습니다.
+3. `Interview.Studio-0.2.6-x64.exe`를 내려받습니다.
 4. SmartScreen이 표시되면 게시자가 `알 수 없음`인 개인용 alpha임을 확인하고, 신뢰할 수 있는 저장소에서 직접 받은 파일일 때만 `추가 정보` → `실행`을 선택합니다.
 5. 설치 위치를 선택해 설치한 뒤 Interview Studio를 실행합니다.
 
@@ -135,7 +135,7 @@ Windows `설정` → `개인 정보 및 보안`에서 다음을 켭니다.
 3. 다운로드가 끝나고 `설치됨`으로 바뀐 뒤에만 최초 설정을 완료할 수 있습니다.
 4. 이후 설정에서 `base` 또는 `medium`으로 바꿀 수 있지만, 선택 모델이 설치되지 않으면 면접 시작 전 장치 점검이 다운로드를 요구합니다.
 
-모델 다운로드에는 인터넷 연결과 충분한 디스크 공간이 필요합니다. 내려받는 도중 앱을 종료했다면 다시 다운로드하십시오.
+모델 다운로드에는 인터넷 연결과 충분한 디스크 공간이 필요합니다. 내려받는 도중 앱을 종료했다면 다시 다운로드하십시오. 0.2.5 이하에서 정상 파일이 `무결성 검증 실패`로 거부됐다면 0.2.6 이상으로 업데이트한 뒤 다시 누르십시오. 실패한 임시 파일은 자동으로 제거됩니다.
 
 ### 3.3 면접관 음성 선택
 
@@ -188,7 +188,7 @@ pnpm build
 pnpm package:win
 ```
 
-생성물은 `release\0.2.5\`에 저장됩니다. 소스로 실행한 경우에는 Release 설치본과 달리 `whisper-cli.exe`가 자동으로 포함되지 않습니다. `whisper.cpp`를 빌드한 뒤 실행 파일과 DLL을 아래 둘 중 한 위치에 함께 두십시오.
+생성물은 `release\0.2.6\`에 저장됩니다. 소스로 실행한 경우에는 Release 설치본과 달리 `whisper-cli.exe`가 자동으로 포함되지 않습니다. `whisper.cpp`를 빌드한 뒤 실행 파일과 DLL을 아래 둘 중 한 위치에 함께 두십시오.
 
 - `%APPDATA%\Interview Studio\runtime\bin`
 - `%LOCALAPPDATA%\whisper.cpp`
@@ -197,7 +197,7 @@ pnpm package:win
 
 ## 6. macOS 설치와 설정
 
-1. [Releases](https://github.com/mynameisjinhohong/interview-studio/releases)에서 Apple Silicon용 `Interview.Studio-0.2.5-arm64.dmg`를 내려받습니다.
+1. [Releases](https://github.com/mynameisjinhohong/interview-studio/releases)에서 Apple Silicon용 `Interview.Studio-0.2.6-arm64.dmg`를 내려받습니다.
 2. 앱을 Applications 폴더로 옮깁니다.
 3. 서명되지 않은 alpha 경고가 뜨면 `시스템 설정` → `개인정보 보호 및 보안`에서 차단된 Interview Studio의 `확인 없이 열기`를 선택합니다.
 4. 터미널에서 사용할 CLI를 설치하고 로그인한 뒤 앱을 다시 시작합니다.
@@ -229,6 +229,10 @@ Node.js와 CLI가 서로 다른 환경에 설치됐거나 앱이 시작된 시�
 ### `whisper-cli 실행 파일을 찾을 수 없습니다`
 
 Releases의 Windows 설치 파일인지 확인합니다. 소스로 실행 중이면 5절의 경로에 `whisper-cli.exe`와 같은 빌드 폴더의 DLL을 함께 복사합니다.
+
+### `STT 모델 무결성 검증에 실패했습니다`
+
+0.2.5 이하는 Hugging Face Xet 저장소의 CDN 객체 ETag를 모델 파일의 SHA-256으로 오인해 정상 다운로드도 거부할 수 있습니다. 0.2.6 이상은 앱에 고정된 공식 파일 크기와 SHA-256을 직접 검증합니다. 최신 버전으로 업데이트한 뒤 `small` 다운로드를 다시 누르십시오.
 
 ### 마이크 또는 카메라가 보이지 않음
 
