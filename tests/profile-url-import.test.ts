@@ -11,19 +11,17 @@ const roots: string[] = []
 afterEach(() => roots.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true })))
 
 describe('profile URL import', () => {
-  it.skipIf(process.env.LIVE_PROFILE_URL !== '1')('reads the reported hongjinho.dev portfolio end to end', async () => {
-    const page = await new PublicUrlReader().read('https://hongjinho.dev/')
-    expect(page.title).toContain('홍진호')
-    expect(page.text.length).toBeGreaterThan(7_000)
-    expect(page.text).toContain('강한 토끼만이 살아남는다')
-    expect(page.text).toContain('Jenkins CI/CD')
-    expect(page.text).toContain('Invant')
+  const liveProfileUrl = process.env.LIVE_PROFILE_URL
+  it.skipIf(!liveProfileUrl)('reads an explicitly supplied public portfolio end to end', async () => {
+    const page = await new PublicUrlReader().read(liveProfileUrl!)
+    expect(page.title.length).toBeGreaterThan(0)
+    expect(page.text.length).toBeGreaterThan(500)
   }, 30_000)
 
   it('keeps visible portfolio content while removing Next.js hydration scripts', () => {
-    const html = '<html><head><title>홍진호 | 포트폴리오</title><script>self.__next_f.push(["잘못된 명령"])</script></head><body><main><h1>Unity 개발자</h1><p>Jenkins CI/CD 구축 경험</p><img alt="게임 플레이 화면" /></main></body></html>'
+    const html = '<html><head><title>김개발 | 포트폴리오</title><script>self.__next_f.push(["잘못된 명령"])</script></head><body><main><h1>Unity 개발자</h1><p>Jenkins CI/CD 구축 경험</p><img alt="게임 플레이 화면" /></main></body></html>'
     const extracted = htmlToReadableText(html)
-    expect(extracted.title).toBe('홍진호 | 포트폴리오')
+    expect(extracted.title).toBe('김개발 | 포트폴리오')
     expect(extracted.text).toContain('Unity 개발자')
     expect(extracted.text).toContain('Jenkins CI/CD 구축 경험')
     expect(extracted.text).toContain('게임 플레이 화면')
@@ -55,7 +53,7 @@ describe('profile URL import', () => {
       invokeStructured: vi.fn(async (_task: string, input: unknown, _schema?: unknown, _validator?: unknown, _options?: unknown) => {
         cliInput = input
         return {
-          markdown: '# 홍진호\n\n## 경력과 역할\nUnity 개발자\n## 기술 스택\nC#\n## 프로젝트\n강한 토끼만이 살아남는다\n## 성과\n출시 성과\n## 문제 해결 사례\nJenkins CI/CD로 빌드 문제 해결',
+          markdown: '# 김개발\n\n## 경력과 역할\nUnity 개발자\n## 기술 스택\nC#\n## 프로젝트\n샘플 게임\n## 성과\n출시 성과\n## 문제 해결 사례\nJenkins CI/CD로 빌드 문제 해결',
           completeness: 100,
           missingSections: []
         }
@@ -65,25 +63,25 @@ describe('profile URL import', () => {
     const cli = { get: () => adapter } as unknown as CliRegistry
     const urlReader = {
       read: vi.fn(async () => ({
-        title: '홍진호 | 게임 개발자 포트폴리오',
-        finalUrl: 'https://hongjinho.dev/',
-        text: 'Unity와 C#을 중심으로 게임을 개발했습니다. 강한 토끼만이 살아남는다. Jenkins CI/CD 구축 경험.'
+        title: '김개발 | 게임 개발자 포트폴리오',
+        finalUrl: 'https://portfolio.example/',
+        text: 'Unity와 C#을 중심으로 샘플 게임을 개발했습니다. Jenkins CI/CD 구축 경험.'
       }))
     }
 
     // The third dependency is the URL reader seam exercised by this regression test.
     const service = new ProfileService(db, cli, urlReader as never)
     const profile = await service.create({
-      name: '홍진호', targetRole: '게임 클라이언트 개발자', experienceLevel: '1~3년',
-      filePaths: [], urls: ['https://hongjinho.dev/'], provider: 'codex'
+      name: '김개발', targetRole: '게임 클라이언트 개발자', experienceLevel: '1~3년',
+      filePaths: [], urls: ['https://portfolio.example/'], provider: 'codex'
     })
 
-    expect(urlReader.read).toHaveBeenCalledWith('https://hongjinho.dev/')
-    expect(profile.sources[0].title).toBe('홍진호 | 게임 개발자 포트폴리오')
+    expect(urlReader.read).toHaveBeenCalledWith('https://portfolio.example/')
+    expect(profile.sources[0].title).toBe('김개발 | 게임 개발자 포트폴리오')
     expect(profile.sources[0].extractedText).toContain('Jenkins CI/CD')
     expect(profile.completeness).toBe(100)
     expect(cliInput).toMatchObject({
-      documents: expect.stringContaining('강한 토끼만이 살아남는다')
+      documents: expect.stringContaining('샘플 게임')
     })
     expect(adapter.invokeStructured.mock.calls[0]?.[4]).toMatchObject({
       idleTimeoutMs: 90_000, retries: 0
@@ -100,8 +98,8 @@ describe('profile URL import', () => {
     const service = new ProfileService(db, cli, urlReader)
 
     await expect(service.create({
-      name: '홍진호', targetRole: '게임 클라이언트 개발자', experienceLevel: '1~3년',
-      filePaths: [], urls: ['https://hongjinho.dev/'], provider: 'codex'
+      name: '김개발', targetRole: '게임 클라이언트 개발자', experienceLevel: '1~3년',
+      filePaths: [], urls: ['https://portfolio.example/'], provider: 'codex'
     })).rejects.toThrow('본문을 읽지 못했습니다')
     expect(adapter.invokeStructured).toHaveBeenCalledOnce()
   })
@@ -127,7 +125,7 @@ describe('profile URL import', () => {
     const service = new ProfileService(db, cli, urlReader)
 
     const profile = await service.create({
-      name: '홍진호', targetRole: '게임 클라이언트 개발자', experienceLevel: '1~3년',
+      name: '김개발', targetRole: '게임 클라이언트 개발자', experienceLevel: '1~3년',
       filePaths: [], urls: ['https://portfolio.notion.site/example'], provider: 'codex', manualContext: ''
     })
 
@@ -145,9 +143,9 @@ describe('profile URL import', () => {
     const id = crypto.randomUUID()
     mkdirSync(join(root, 'profiles', id), { recursive: true })
     const profile = {
-      id, name: '홍진호', targetRole: '게임 클라이언트 개발자', experienceLevel: '1~3년',
+      id, name: '김개발', targetRole: '게임 클라이언트 개발자', experienceLevel: '1~3년',
       contextMarkdown: '# 이전 빈 컨텍스트', completeness: 10, missingSections: ['프로젝트'],
-      sources: [{ id: crypto.randomUUID(), kind: 'url' as const, title: 'hongjinho.dev', location: 'https://hongjinho.dev/', extractedText: '', createdAt: new Date().toISOString() }],
+      sources: [{ id: crypto.randomUUID(), kind: 'url' as const, title: 'portfolio.example', location: 'https://portfolio.example/', extractedText: '', createdAt: new Date().toISOString() }],
       createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
     }
     const db = {
@@ -159,7 +157,7 @@ describe('profile URL import', () => {
       completeness: 100, missingSections: [], followUpQuestions: []
     })) }
     const cli = { get: () => adapter } as unknown as CliRegistry
-    const urlReader = { read: vi.fn(async () => ({ title: '홍진호 | 포트폴리오', finalUrl: 'https://hongjinho.dev/', text: 'Unity C# 프로젝트 출시 수상 문제 해결 경력 역할 기술 스택' })) }
+    const urlReader = { read: vi.fn(async () => ({ title: '김개발 | 포트폴리오', finalUrl: 'https://portfolio.example/', text: 'Unity C# 프로젝트 출시 수상 문제 해결 경력 역할 기술 스택' })) }
     const service = new ProfileService(db, cli, urlReader)
 
     const regenerated = await service.regenerate(id, 'codex')
@@ -192,7 +190,7 @@ describe('profile URL import', () => {
     const service = new ProfileService(db, cli, urlReader)
 
     const profile = await service.create({
-      name: '홍진호', targetRole: '게임 클라이언트 개발자', experienceLevel: '1~3년',
+      name: '김개발', targetRole: '게임 클라이언트 개발자', experienceLevel: '1~3년',
       filePaths: [], urls: ['https://example.com/'], provider: 'codex'
     })
 

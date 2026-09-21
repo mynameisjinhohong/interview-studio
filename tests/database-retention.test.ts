@@ -30,7 +30,7 @@ describe('session retention', () => {
     )`)
     const timestamp = new Date().toISOString()
     legacy.prepare('INSERT INTO profiles VALUES (?,?,?,?,?,?,?,?,?,?)').run(
-      'legacy-profile', '홍진호', '게임 클라이언트 개발자', '1~3년', '# 기존 컨텍스트', 80, '[]', '[]', timestamp, timestamp
+      'legacy-profile', '김개발', '게임 클라이언트 개발자', '1~3년', '# 기존 컨텍스트', 80, '[]', '[]', timestamp, timestamp
     )
     legacy.close()
 

@@ -1,6 +1,6 @@
-# Interview Studio 설치 및 테스트 가이드
+# Interview Studio 설치 및 사용 가이드
 
-이 문서는 개인용 alpha 버전 `0.2.9`를 다른 PC에서 내려받아 실행하고, 카메라·마이크·AI CLI를 연결해 첫 면접을 테스트하는 절차를 설명합니다.
+이 문서는 최신 공개 alpha를 Windows 또는 macOS에 설치하고, 카메라·마이크·AI CLI를 연결해 첫 면접을 완료하는 절차를 설명합니다.
 
 ## 1. 지원 범위
 
@@ -10,18 +10,16 @@
 | macOS 13 이상 | 지원 | 현재 배포 파일은 Apple Silicon용 |
 | iPhone / iPad의 iOS·iPadOS | 미지원 | Electron, 데스크톱 CLI, 로컬 DB 및 FFmpeg 의존성 때문에 설치 불가 |
 
-질문의 “IOS”가 macOS를 뜻한 경우 아래 macOS 절차를 따르면 됩니다. 실제 iPhone 또는 iPad용 앱은 v1 범위에 포함되어 있지 않습니다.
-
-현재 배포 파일은 코드 서명하지 않은 개인용 alpha입니다. Windows SmartScreen 또는 macOS Gatekeeper 경고가 나타날 수 있습니다. GitHub 저장소의 Release에서 받은 파일인지 확인한 뒤에만 실행하십시오.
+현재 배포 파일은 코드 서명하지 않은 공개 alpha입니다. Windows SmartScreen 또는 macOS Gatekeeper 경고가 나타날 수 있습니다. GitHub 저장소의 Release에서 받은 파일인지 확인한 뒤에만 실행하십시오.
 
 ## 2. 가장 빠른 Windows 설치
 
 ### 2.1 앱 설치
 
-1. 저장소가 private이므로 Windows PC의 브라우저에서 GitHub 계정 `mynameisjinhohong`로 로그인합니다.
-2. [Interview Studio Releases](https://github.com/mynameisjinhohong/interview-studio/releases)에서 최신 prerelease를 엽니다.
-3. `Interview.Studio-0.2.9-x64.exe`를 내려받습니다.
-4. SmartScreen이 표시되면 게시자가 `알 수 없음`인 개인용 alpha임을 확인하고, 신뢰할 수 있는 저장소에서 직접 받은 파일일 때만 `추가 정보` → `실행`을 선택합니다.
+1. [Interview Studio Releases](https://github.com/mynameisjinhohong/interview-studio/releases)에서 최신 prerelease를 엽니다.
+2. `Interview.Studio-<version>-x64.exe`를 내려받습니다.
+3. 브라우저가 파일을 차단하면 다운로드 출처가 이 저장소인지 다시 확인합니다.
+4. SmartScreen이 표시되면 게시자가 `알 수 없음`인 unsigned alpha임을 확인하고, 신뢰할 수 있는 저장소에서 직접 받은 파일일 때만 `추가 정보` → `실행`을 선택합니다.
 5. 설치 위치를 선택해 설치한 뒤 Interview Studio를 실행합니다.
 
 Windows 설치 파일에는 FFmpeg와 `whisper-cli.exe`가 포함됩니다. 음성 모델은 크기가 크므로 앱에서 별도로 내려받습니다.
@@ -48,7 +46,7 @@ codex --version
 codex login status
 ```
 
-Codex의 네이티브 Windows 지원은 버전에 따라 제한될 수 있습니다. 이 앱은 Windows 프로세스에서 CLI를 직접 실행하므로 WSL 안에만 설치된 `codex`는 자동 탐색하지 않습니다. 반드시 일반 Windows PowerShell에서도 `codex --version`이 동작하는지 확인하십시오. 공식 안내: [Codex CLI 시작하기](https://help.openai.com/en/articles/11096431)
+Codex의 네이티브 Windows 지원은 버전에 따라 제한될 수 있습니다. 이 앱은 Windows 프로세스에서 CLI를 직접 실행하므로 WSL 안에만 설치된 `codex`는 자동 탐색하지 않습니다. 반드시 일반 Windows PowerShell에서도 `codex --version`이 동작하는지 확인하십시오. 공식 안내: [Codex CLI 시작하기](https://learn.chatgpt.com/docs/codex/cli)
 
 #### Claude Code
 
@@ -71,7 +69,7 @@ Git Bash 위치를 자동으로 찾지 못하면 다음 환경 변수를 사용�
 )
 ```
 
-공식 안내: [Claude Code 설치](https://docs.anthropic.com/en/docs/claude-code/getting-started)
+공식 안내: [Claude Code 설치](https://code.claude.com/docs/en/getting-started)
 
 #### Gemini CLI
 
@@ -158,7 +156,7 @@ Windows `설정` → `개인 정보 및 보안`에서 다음을 켭니다.
 
 처음에는 실패 지점을 쉽게 구분할 수 있도록 3개의 본 질문과 연습 모드를 권장합니다.
 
-1. 프로필을 만들고 포트폴리오 URL `https://hongjinho.dev/`를 추가합니다.
+1. 프로필을 만들고 본인의 공개 포트폴리오 URL 또는 이력서 파일을 추가합니다.
 2. 컨텍스트 생성이 끝난 뒤 프로젝트·기술·성과 항목이 포함됐는지 확인합니다.
 3. `새 세션` → `기술 면접` → `연습 모드`를 선택합니다.
 4. 기술 스택 1~2개, 본 질문 3개로 설정합니다.
@@ -171,7 +169,7 @@ Windows `설정` → `개인 정보 및 보안`에서 다음을 켭니다.
 
 ## 5. Windows에서 소스로 실행하거나 직접 패키징
 
-설치 파일 대신 현재 소스를 실행하려면 Git, Node.js 24, pnpm 11이 필요합니다. 저장소가 private인 동안에는 GitHub 계정 인증이 필요합니다.
+설치 파일 대신 현재 소스를 실행하려면 Git, Node.js 24, pnpm 11이 필요합니다.
 
 ```powershell
 git clone https://github.com/mynameisjinhohong/interview-studio.git
@@ -190,7 +188,7 @@ pnpm build
 pnpm package:win
 ```
 
-생성물은 `release\0.2.9\`에 저장됩니다. 소스로 실행한 경우에는 Release 설치본과 달리 `whisper-cli.exe`가 자동으로 포함되지 않습니다. `whisper.cpp`를 빌드한 뒤 실행 파일과 DLL을 아래 둘 중 한 위치에 함께 두십시오.
+생성물은 `release\<version>\`에 저장됩니다. 소스로 실행한 경우에는 Release 설치본과 달리 `whisper-cli.exe`가 자동으로 포함되지 않습니다. `whisper.cpp`를 빌드한 뒤 실행 파일과 DLL을 아래 둘 중 한 위치에 함께 두십시오.
 
 - `%APPDATA%\Interview Studio\runtime\bin`
 - `%LOCALAPPDATA%\whisper.cpp`
@@ -199,7 +197,7 @@ pnpm package:win
 
 ## 6. macOS 설치와 설정
 
-1. [Releases](https://github.com/mynameisjinhohong/interview-studio/releases)에서 Apple Silicon용 `Interview.Studio-0.2.9-arm64.dmg`를 내려받습니다.
+1. [Releases](https://github.com/mynameisjinhohong/interview-studio/releases)에서 Apple Silicon용 `Interview.Studio-<version>-arm64.dmg`를 내려받습니다.
 2. 앱을 Applications 폴더로 옮깁니다.
 3. 서명되지 않은 alpha 경고가 뜨면 `시스템 설정` → `개인정보 보호 및 보안`에서 차단된 Interview Studio의 `확인 없이 열기`를 선택합니다.
 4. 터미널에서 사용할 CLI를 설치하고 로그인한 뒤 앱을 다시 시작합니다.
@@ -261,6 +259,6 @@ Windows 권한과 물리적 연결을 확인하고 장치를 사용하는 다른
 
 최종 평가는 60초 고정 제한 없이 완료될 때까지 실행됩니다. 화면에서 경과 시간과 평가 단계를 확인할 수 있고 `평가 취소`로 중단할 수 있습니다. 마지막 답변의 녹화가 확정되면 카메라와 마이크는 평가 완료를 기다리지 않고 즉시 해제됩니다. 평가를 취소하면 답변과 영상은 보존되지만 세션은 부분 결과로 표시됩니다.
 
-### GitHub Actions 설치 파일 받기
+### GitHub Actions 시험 빌드 받기
 
-Release가 아직 생성되지 않았으면 저장소의 `Actions` → `Build Windows` → 성공한 실행 → `Artifacts`에서 `interview-studio-windows-x64`를 내려받을 수 있습니다. Artifact는 ZIP으로 제공됩니다.
+일반 사용자는 Releases의 설치 파일을 사용하십시오. 유지보수자나 시험 빌드 검증자는 GitHub에 로그인한 뒤 저장소의 `Actions` → `Build Windows` → 성공한 실행 → `Artifacts`에서 `interview-studio-windows-x64`를 내려받을 수 있습니다. Artifact는 ZIP으로 제공되며 정식 Release보다 보존 기간이 짧습니다.
