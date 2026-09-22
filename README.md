@@ -6,6 +6,43 @@ Interview Studio는 설치된 AI CLI와 로컬 음성·영상 도구를 이용�
 
 > 현재 버전은 기능 검증을 위한 unsigned alpha입니다. 중요한 원본 자료는 별도로 백업하고, 앱의 평가를 실제 채용 결과나 전문적인 판단의 대체물로 사용하지 마십시오.
 
+## 앱 화면
+
+아래 화면은 실제 앱에 공개용 가상 프로필과 면접 기록을 넣어 캡처한 예시입니다. 실제 사용자 자료나 녹화는 포함되어 있지 않습니다.
+
+<table>
+  <tr>
+    <td width="50%">
+      <strong>대시보드</strong><br />
+      <sub>최근 면접, 평균 점수, 약점 큐와 점수 추이를 한눈에 확인합니다.</sub><br /><br />
+      <img src="docs/images/dashboard.png" alt="Interview Studio 대시보드" />
+    </td>
+    <td width="50%">
+      <strong>프로필 컨텍스트</strong><br />
+      <sub>파일·URL 수집 결과와 LLM이 정리한 면접 컨텍스트를 검토하고 보완합니다.</sub><br /><br />
+      <img src="docs/images/profile-context.png" alt="Interview Studio 프로필 컨텍스트와 자료 수집 결과" />
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <strong>회사 면접 설정</strong><br />
+      <sub>회사, 직무, 전형 단계와 채용 공고를 입력해 맞춤 면접을 준비합니다.</sub><br /><br />
+      <img src="docs/images/company-session.png" alt="Interview Studio 회사 면접 설정" />
+    </td>
+    <td width="50%">
+      <strong>면접 전 장치 점검</strong><br />
+      <sub>카메라, 마이크 시험 녹음, Whisper 모델과 면접관 음성을 확인합니다.</sub><br /><br />
+      <img src="docs/images/device-check.png" alt="Interview Studio 면접 전 장치 점검" />
+    </td>
+  </tr>
+</table>
+
+### 면접 결과와 복기
+
+질문과 전사, 문항별 점수·피드백·개선 답변 방향, 참고 출처와 녹화 영상을 한 화면에서 확인합니다.
+
+![Interview Studio 면접 결과 보고서](docs/images/interview-report.png)
+
 ## 주요 기능
 
 - 기술 면접과 회사 맞춤 면접
@@ -153,6 +190,14 @@ pnpm typecheck
 pnpm test
 pnpm build
 ```
+
+README용 공개 샘플 화면 다시 캡처:
+
+```bash
+pnpm docs:screenshots
+```
+
+이 명령은 임시 사용자 데이터 폴더에 가상 프로필과 세션을 만든 뒤 `docs/images`의 화면을 갱신하고, 임시 데이터는 종료 시 삭제합니다.
 
 패키징:
 

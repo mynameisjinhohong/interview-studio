@@ -16,6 +16,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "docs:screenshots": "pnpm build && node scripts/capture-readme-screenshots.mjs",
     "package:mac": "pnpm build && electron-builder --mac dmg zip",
     "package:win": "pnpm build && electron-builder --win nsis --x64 --publish never",
     "postinstall": "electron-builder install-app-deps"
