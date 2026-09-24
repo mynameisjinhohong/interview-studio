@@ -78,8 +78,18 @@ Interview Studio는 설치된 AI CLI와 로컬 음성·영상 도구를 이용�
 
 ### 1. 앱 설치
 
-1. [Releases](https://github.com/mynameisjinhohong/interview-studio/releases)에서 가장 최신 버전을 엽니다.
-2. Windows는 `Interview.Studio-<version>-x64.exe`, Apple Silicon Mac은 `Interview.Studio-<version>-arm64.dmg`를 내려받습니다.
+설치 파일은 저장소의 `Code` 탭이나 `release/` 폴더에 포함되지 않습니다. [Releases](https://github.com/mynameisjinhohong/interview-studio/releases)에서 원하는 버전을 연 뒤, 접혀 있다면 **Assets**를 눌러 펼쳐야 합니다.
+
+현재 공개 alpha인 v0.2.9의 직접 다운로드 링크는 다음과 같습니다.
+
+| 운영체제 | 설치 파일 |
+| --- | --- |
+| Windows 10/11 x64 | [`Interview.Studio-0.2.9-x64.exe`](https://github.com/mynameisjinhohong/interview-studio/releases/download/v0.2.9/Interview.Studio-0.2.9-x64.exe) |
+| macOS 13+ Apple Silicon | [`Interview.Studio-0.2.9-arm64.dmg`](https://github.com/mynameisjinhohong/interview-studio/releases/download/v0.2.9/Interview.Studio-0.2.9-arm64.dmg) |
+| macOS 13+ Apple Silicon ZIP | [`Interview.Studio-0.2.9-arm64-mac.zip`](https://github.com/mynameisjinhohong/interview-studio/releases/download/v0.2.9/Interview.Studio-0.2.9-arm64-mac.zip) |
+
+1. 위 표에서 운영체제에 맞는 파일을 내려받거나 [v0.2.9 Release 페이지](https://github.com/mynameisjinhohong/interview-studio/releases/tag/v0.2.9)의 **Assets**에서 선택합니다.
+2. 이후 버전에서는 Windows용 `Interview.Studio-<version>-x64.exe`, Apple Silicon Mac용 `Interview.Studio-<version>-arm64.dmg`를 선택합니다.
 3. 앱이 아직 코드 서명되지 않았으므로 SmartScreen 또는 Gatekeeper 경고가 나타날 수 있습니다. 파일 출처가 이 저장소의 Release인지 확인한 뒤 실행하십시오.
 
 운영체제별 자세한 절차는 [설치 및 사용 가이드](docs/INSTALLATION_AND_TESTING.md)를 참고하십시오.
